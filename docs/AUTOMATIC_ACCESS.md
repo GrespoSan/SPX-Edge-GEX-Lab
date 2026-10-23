@@ -1,8 +1,11 @@
 # Archivio SPX automatico e privato per Edge
 
 Stato: il proprietario ha applicato la policy dedicata, configurato i Secrets e
-mostrato l'app autenticata con risultati su una fotografia reale. Il runner non
-ha applicato modifiche al progetto Supabase. Vedere [verifiche e limiti](VALIDATION.md).
+mostrato l'app autenticata con risultati su una fotografia reale. Il successivo
+rapporto JSON conferma il controllo scalare su tutti i 1.739 contratti validi,
+con NET e Gross riconciliati; il rapporto e il CSV sono stati esaminati nel runner.
+Il runner non ha applicato modifiche al progetto Supabase.
+Vedere [verifiche e limiti](VALIDATION.md).
 
 ## Configurazione iniziale, una volta
 
@@ -70,11 +73,12 @@ esatti, esclude altri oggetti e verifica il mancato accesso per un altro UID.
 Non prova scritture reali contro gli oggetti di produzione.
 
 L'installazione, i Secrets e la lettura reale sono stati confermati dalle
-schermate del proprietario. Resta da osservare il controllo aritmetico automatico
-aggiunto successivamente e l'arrivo di una nuova fotografia. Il rapporto JSON
-scaricabile dall'app consente di esaminare la riconciliazione senza condividere
-credenziali o scaricare manualmente la catena dal pannello Supabase. I test
-simulati locali restano distinti dalle prove online.
+schermate del proprietario. Il successivo rapporto JSON dell'app conferma anche
+la verifica aritmetica, esaminata insieme al CSV senza condividere credenziali
+o scaricare manualmente la catena dal pannello Supabase. Non e' ancora stato
+osservato online l'arrivo di una fotografia successiva; il relativo comportamento
+e' coperto da test simulati. Il runner non dispone dei byte originali della
+fotografia e non presenta i controlli sugli export come un nuovo calcolo locale.
 La modifica alle autorizzazioni e' limitata al nuovo lettore: metodologia,
 repository, account esistenti, cron-job e collegamento MT4 Serafini restano fuori
 ambito. Non e' necessario rendere pubblico il bucket.

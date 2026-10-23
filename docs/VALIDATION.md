@@ -12,9 +12,13 @@ browser del proprietario. Nessun file originale, UID o segreto viene pubblicato
 come prova nel repository.
 
 Il runner resta privo di accesso alla sessione privata e ai byte di quella
-fotografia: il test reale locale non e' stato eseguito. La schermata precede il
-nuovo controllo scalare automatico descritto sotto e non ne dimostra l'esito.
-L'aggiornamento con una fotografia successiva non e' ancora stato osservato.
+fotografia: il test reale locale non e' stato eseguito. Successivamente il
+proprietario ha fornito il CSV del profilo e il rapporto JSON generati dalla
+stessa app: il controllo scalare online risulta superato su tutti i 1.739
+contratti validi. I rapporti esportati sono stati esaminati nel runner, senza
+pubblicarli nel repository. L'aggiornamento con una fotografia successiva non
+e' ancora stato osservato online; la sostituzione del file e' coperta dai test
+locali simulati.
 
 ## Verifiche locali
 
@@ -103,8 +107,26 @@ riusa il controllo precedente; un file diverso o cambio di modalita' lo ripete.
 
 Il confronto riusa selezione e tempi residui del wrapper. Non certifica fonte,
 qualita' delle quotazioni, posizioni dealer o convenzioni di regolamento.
-Resta da osservare l'esito del nuovo controllo sulla fotografia reale online,
-o eseguire `scripts/verify_snapshot.py` sui byte originali autorizzati.
+Il rapporto JSON reale fornito dal proprietario riporta `arithmetic_check: passed`
+e `contracts_cross_checked: 1739`, pari a tutti i contratti validi su 1.880.
+NET e Gross coincidono con i rispettivi totali scalari, con differenza zero nei
+valori esportati. Il runner ha controllato questi confronti e la coerenza dei
+metadati, inclusa la regola di valutazione all'ultima chiusura fuori sessione.
+
+Il CSV associato contiene 239 strike nella fascia del grafico: valori finiti,
+strike unici e ordinati, OI intero non negativo, segni call/put e riconciliazione
+NET = Call + Put su tutte le righe. Call wall e put wall coincidono con il JSON.
+La differenza rispetto ai totali della catena e' compatibile con i contratti
+esterni alla fascia CSV: il gross residuo e' non negativo e copre in valore
+assoluto il net residuo. Il prefisso hash riportato nei nomi dei due export
+coincide; senza i byte originali questo non costituisce una nuova verifica
+crittografica della fotografia.
+
+La verifica aritmetica richiesta e' quindi documentata attraverso il rapporto
+dell'app reale e i controlli sugli export. Non e' stato eseguito nel runner
+`scripts/verify_snapshot.py` sulla fotografia originale, che resta nel bucket
+privato. Nessuna verifica locale dell'autenticita' della fonte viene dedotta
+da questo rapporto.
 
 ## Nuovo archivio automatico privato
 

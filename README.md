@@ -119,4 +119,5 @@ il proprietario ha confermato il funzionamento con login dedicato, lettura priva
 e risultati su una fotografia SPX reale. L'archivio richiede autenticazione;
 caricamento locale ed esempio sintetico restano accessibili senza credenziali.
 Vedere [verifiche e limiti](docs/VALIDATION.md) per distinguere questa prova dai
-test locali e dal successivo confronto aritmetico automatico.
+test locali e dal confronto aritmetico automatico, confermato dal rapporto JSON
+fornito dal proprietario ed esaminato insieme al CSV del profilo.
