@@ -1,73 +1,76 @@
-# Accesso automatico Edge: proposta e controllo preliminare
+# Archivio SPX automatico e privato per Edge
 
-Stato: progettazione, non attivato. Nessuna modifica remota applicata a Supabase.
-La richiesta successiva del proprietario e' semplificare e automatizzare l'accesso
-senza compromettere i dati. Resta esclusa qualsiasi modifica alla metodologia
-Serafini, ai suoi repository, cron-job e collegamento MT4.
+Stato: codice predisposto e testato con risposte HTTP simulate; integrazione
+Supabase reale ancora disattivata. Nessuna modifica remota applicata.
 
-## Risultato previsto
+## Configurazione iniziale, una volta
 
-- Una configurazione iniziale, senza download manuali ad ogni fotografia.
-- Accesso autenticato ai dati privati anche se l'interfaccia Edge e' pubblica.
-- Individuazione dell'ultima fotografia SPX gia' archiviata, con timestamp visibile.
-- Aggiornamento periodico mentre l'app e' aperta; al successivo accesso viene
-  recuperata la fotografia disponibile piu' recente. Non e' un nuovo collector.
-- Gestione del rinnovo della sessione senza inserire nuovi JWT o URL firmati
-  ad ogni scadenza. Resta possibile dover rifare il login dopo logout o revoca.
-- Elaborazione con il solo motore Edge, senza scritture a Storage, database o MT4.
+1. Nel progetto Supabase esistente, Authentication > Users > Add user > Create
+   new user: creare un'utenza nuova destinata solo a Edge. Usare un'email propria,
+   una password riservata e la conferma email. Non modificare utenti di APP SPX.
+2. Copiare il solo User UID. Non comunicare password, chiavi amministrative,
+   token di sessione o service-role key in chat o nel repository.
+3. Revisionare `supabase/enable_edge_reader.sql`, sostituendo il placeholder UUID
+   con l'ID appena creato. Eseguire la query nel SQL Editor del progetto.
+   La query aggiunge una sola policy SELECT riferita a quell'ID e ai soli file
+   `AAAA-Wxx/snapshots/SPX_CBOE_AAAAMMGG_HHMMSS.json[.gz]` in spx-snapshots.
+   Non modifica policy esistenti, dati, ruoli, bucket, calcoli o cron-job.
+4. Se una verifica della query fallisce, fermarsi e condividere il messaggio:
+   non eliminare o allargare le protezioni per farla passare. La transazione
+   esegue rollback su errore. Se la policy esiste gia', si ferma senza sostituirla.
+5. Nei Secrets della sola app Streamlit Edge configurare:
 
-## Vincoli di accesso
+   ```toml
+   SUPABASE_URL = "https://PROJECT.supabase.co"
+   SUPABASE_ANON_KEY = "CHIAVE_PUBLISHABLE_O_ANON"
+   EDGE_READER_USER_ID = "UUID_UTENTE_EDGE"
+   EDGE_ARCHIVE_ENABLED = true
+   ```
 
-L'app pubblica non deve scaricare fotografie private usando un'identita'
-condivisa e poi mostrarle a visitatori anonimi. Il controllo di accesso deve
-precedere ogni lettura, aggiornamento, grafico e download dei dati privati.
-Il caricamento locale e l'esempio sintetico possono restare pubblici.
+   Inserire i valori effettivi solo nel pannello Secrets. La chiave deve essere
+   publishable/anon, mai service_role o sb_secret_*. La password dell'utenza Edge
+   non va nei Secrets: viene inserita nel form di login dell'app.
+6. Aprire Edge, scegliere Archivio SPX automatico e accedere con email e password
+   dell'utenza dedicata. L'app ricorda l'accesso nella sessione e rinnova i JWT;
+   non servono download, token copiati o link firmati rinnovati a mano.
 
-Non riutilizzare service-role key, chiavi sb_secret_*, credenziali amministrative
-o connessioni privilegiate di APP SPX. Non allargare le policy per anon o per
-tutti gli utenti authenticated. Non modificare la policy che serve ad APP SPX
-per darle indirettamente accesso a Edge.
+## Comportamento automatico
 
-Creare un account Auth ordinario e aggiungere SELECT al bucket non dimostra,
-da solo, che quell'account sia di sola lettura: potrebbe ereditare scritture su
-altre tabelle, accessi ad altri oggetti o funzioni SECURITY DEFINER eseguibili.
-Prima di scegliere il meccanismo vanno esaminate le autorizzazioni effettive.
-Il controllo locale dei claim JWT non sostituisce questo esame.
+La cartella settimanale piu' recente viene cercata nell'elenco del bucket. Nella
+prima settimana con fotografie grezze SPX viene selezionato il file con stamp
+nel nome piu' recente. Non vengono letti logs, replay o risultati Serafini.
+Le pagine dell'elenco sono ordinate e paginate, con un limite che produce un
+messaggio di errore anziche' scegliere da un risultato incompleto.
+Il timestamp del payload resta il riferimento del motore matematico.
 
-## Primo passo: controllo che non modifica il progetto
+Ogni due minuti, mentre la pagina e' aperta, la sessione controlla nuovi file.
+Un file con stesso percorso e updated_at viene riutilizzato nella sola sessione;
+se cambia, viene scaricato nuovamente. E' disponibile anche Aggiorna ora.
+Non vengono creati cron-job o collector; ad app chiusa non ci sono nuovi poll.
+Un riavvio, logout o revoca puo' richiedere un nuovo login.
 
-Eseguire `supabase/inspect_edge_access.sql` nel SQL Editor del progetto esistente.
-Il comando contiene una sola SELECT e legge esclusivamente metadati di
-sicurezza e nomi di fotografie, senza accedere a chiavi o password. Il risultato
-e' una sola cella, `edge_access_report`, da copiare per la verifica.
-Non cambia utenti, ruoli, policy, bucket, cron-job o righe applicative.
-I risultati vanno condivisi privatamente per la verifica, non commessi nel
-repository pubblico. Non includere esportazioni di Secrets o credenziali.
+I visitatori anonimi vedono solo il form di accesso o le modalita' pubbliche di
+caricamento locale ed esempio sintetico. Nessun dato privato e' conservato in
+cache globale. Esci da Edge elimina token e dati della sessione locale; per
+revocare un account definitivamente usare gli strumenti Auth del proprietario.
 
-L'analisi richiede poi di verificare i grant effettivi, compresi eventuali ruoli
-ereditati e funzioni accessibili: il rapporto e' un punto di partenza, non una
-certificazione completa dei privilegi.
+## Permessi e limiti della verifica
 
-## Configurazione da definire dopo il controllo
+Il rapporto fornito dal proprietario conferma bucket privato, RLS attiva su
+storage.objects e nessuna policy esistente su tale tabella. I grant SQL di
+INSERT/UPDATE/DELETE ai ruoli anon/authenticated sono generici e non dimostrano
+accesso effettivo: in assenza di policy le operazioni sono negate da RLS.
+Aggiungere solo SELECT al singolo UID non abilita scritture agli oggetti.
 
-1. Identificare un accesso dedicato a Edge, applicando i limiti dal lato server:
-   sola lettura/elenco delle fotografie SPX necessarie in spx-snapshots; nessun
-   permesso di inserimento, aggiornamento o eliminazione, ne' accesso aggiuntivo
-   alle risorse dell'applicazione esistente.
-2. Definire eventuali aggiunte alle autorizzazioni come cambiamento separato,
-   mirato e revisionabile. Non modificare o rimuovere le policy esistenti alla
-   cieca; verificare che l'identita' di APP SPX mantenga gli stessi permessi.
-3. Collegare la nuova autenticazione a Edge e rinnovare automaticamente la
-   sessione. Le credenziali restano fuori da Git e non vengono chieste in chat.
-4. Usare l'effettiva struttura delle cartelle per selezionare l'ultima fotografia
-   con paginazione e limiti di richieste, evitando di scaricare tutto il bucket.
-   Il timestamp del payload resta la fonte per la valutazione matematica.
-5. Verificare accessi autorizzati e rifiutati senza tentare scritture sui dati
-   esistenti. Eseguire le prove di scrittura negate soltanto in un ambiente di
-   test isolato, oltre all'ispezione dei privilegi di produzione.
-6. Confrontare un calcolo su una fotografia reale e verificare la lettura
-   automatica online prima di dichiarare l'integrazione completata.
+La query verifica che questo stato non sia cambiato, che il nuovo utente sia
+confermato e non privilegiato e che non risultino altre concessioni di scrittura
+o funzioni SECURITY DEFINER da esaminare. Prova le letture con il ruolo e UID
+esatti, esclude altri oggetti e verifica il mancato accesso per un altro UID.
+Non prova scritture reali contro gli oggetti di produzione.
 
-Non sono ancora stati eseguiti questi passi: mancano una sessione amministrativa
-Supabase accessibile e i risultati del controllo dei permessi. La soluzione
-finale non deve dipendere da rinnovi manuali periodici di token o URL firmati.
+Restano necessari l'installazione da parte del proprietario, i Secrets e una
+prova online con fotografia reale. Le risposte HTTP simulate e il test sintetico
+non dimostrano la configurazione RLS o il funzionamento del progetto reale.
+La modifica alle autorizzazioni e' limitata al nuovo lettore: metodologia,
+repository, account esistenti, cron-job e collegamento MT4 Serafini restano fuori
+ambito. Non e' necessario rendere pubblico il bucket.

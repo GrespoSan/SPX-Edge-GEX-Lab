@@ -31,25 +31,23 @@ Non sono implementate nel wrapper le catene ETF SPY/QQQ.
 
 ## Fotografie private e Supabase
 
-Il bucket `spx-snapshots` resta privato. La lettura remota è facoltativa e parte
-solo premendo il pulsante di lettura; non viene avviato alcun feed live.
-L'app esegue soltanto GET del singolo oggetto richiesto: non elenca oggetti,
-non emette URL firmati, non scrive e non cambia le policy.
+L'archivio automatico usa un'utenza dedicata a Edge con SELECT sulle sole
+fotografie grezze SPX. Il bucket `spx-snapshots` resta privato. L'app pubblica
+richiede login prima di leggere, mostrare o scaricare quei dati; le sessioni
+sono isolate e non usano cache globali per le fotografie.
 
-Sono supportati un URL firmato **già emesso**, oppure un'identità **già esistente**
-con privilegi di sola lettura verificati dal proprietario. Le credenziali
-privilegiate note (`service_role`, `sb_secret_*`, ruoli amministrativi) sono
-rifiutate prima della richiesta. Questo controllo locale non prova i privilegi
-RLS di un'identità: la verifica spetta al proprietario e non richiede tentativi
-reali di scrittura. Senza accesso compatibile, usare il caricamento locale.
+Dopo una configurazione iniziale, l'app seleziona l'ultima fotografia nella
+settimana di archivio piu' recente disponibile e controlla gli aggiornamenti
+ogni due minuti mentre la pagina e' aperta. La sessione viene rinnovata senza
+copiare JWT o URL firmati. Il motore non avvia cron o acquisizioni CBOE live.
 
-Configurare le credenziali solo nei Secrets della nuova app o in un file locale
-`.streamlit/secrets.toml`, escluso da Git. Non inviare chiavi in chat.
-Vedere [pubblicazione e configurazione](docs/DEPLOYMENT.md) e
-[modello dei Secrets](.streamlit/secrets.toml.example).
-Dati e risposte private restano nella sessione dell'utente; non viene usata una
-cache Streamlit condivisa. Limitare la visibilità dell'app agli utenti
-che hanno diritto di vedere le fotografie prima di abilitare la lettura remota.
+La configurazione reale e' ancora da attivare. Seguire
+[la procedura iniziale](docs/AUTOMATIC_ACCESS.md) e
+[il modello dei Secrets](.streamlit/secrets.toml.example).
+Sono vietate credenziali privilegiate; password e token non vanno nel repository
+ne' in chat. I vecchi Secrets con token condiviso o URL firmato non vengono usati
+dall'interfaccia pubblica.
+
 
 ## Metodo
 

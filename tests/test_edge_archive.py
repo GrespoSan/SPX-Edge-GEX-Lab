@@ -1,0 +1,193 @@
+"""Automatic private reader: real HTTP shapes, mocked transport, no remote writes."""
+import base64
+import json
+from pathlib import Path
+
+import httpx
+import pytest
+from streamlit.testing.v1 import AppTest
+
+import edge_archive as A
+from edge_storage import StorageReadError
+
+URL = 'https://exampleproject.supabase.co'
+KEY = 'sb_publishable_example'
+UID = '11111111-2222-4333-8444-555555555555'
+OTHER = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'
+NOW = 1_790_000_000
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def jwt(uid=UID, role='authenticated', expiry=NOW+3600):
+    body = base64.urlsafe_b64encode(json.dumps({'sub': uid, 'role': role, 'exp': expiry}).encode()).decode().rstrip('=')
+    return 'header.' + body + '.signature'
+
+
+def auth_response(uid=UID, role='authenticated', expiry=NOW+3600):
+    return {'access_token': jwt(uid, role, expiry), 'refresh_token': 'PRIVATE_REFRESH', 'user': {'id': uid}}
+
+
+def session(expiry=NOW+3600):
+    return A.ReaderSession(jwt(expiry=expiry), 'PRIVATE_REFRESH', expiry, UID)
+
+
+def test_login_uses_auth_endpoint_and_keeps_credentials_out_of_repr():
+    def handler(request):
+        assert request.method == 'POST' and request.url.path == '/auth/v1/token'
+        assert request.url.params['grant_type'] == 'password'
+        assert json.loads(request.content) == {'email': 'edge@example.test', 'password': 'PRIVATE_PASSWORD'}
+        assert request.headers['apikey'] == KEY
+        return httpx.Response(200, json=auth_response())
+    auth = A.login_reader(URL, KEY, 'edge@example.test', 'PRIVATE_PASSWORD', UID,
+                          now=NOW, transport=httpx.MockTransport(handler))
+    assert auth.user_id == UID and auth.access_token == jwt()
+    assert 'PRIVATE' not in repr(auth) and jwt() not in repr(auth)
+
+
+@pytest.mark.parametrize('data', [auth_response(OTHER), auth_response(role='service_role'),
+                                 auth_response(expiry=NOW-1), {}, {'access_token': 'bad'}])
+def test_wrong_user_privileged_expired_or_invalid_auth_response_is_rejected(data):
+    with pytest.raises(StorageReadError):
+        A.login_reader(URL, KEY, 'edge@example.test', 'password', UID, now=NOW,
+                       transport=httpx.MockTransport(lambda request: httpx.Response(200, json=data)))
+
+
+def test_refresh_is_automatic_and_rotates_tokens():
+    calls=[]
+    def handler(request):
+        calls.append(request)
+        assert request.url.params['grant_type'] == 'refresh_token'
+        assert json.loads(request.content) == {'refresh_token': 'PRIVATE_REFRESH'}
+        data=auth_response(expiry=NOW+7200)
+        data['refresh_token']='NEW_REFRESH'
+        return httpx.Response(200,json=data)
+    auth=A.renew_reader(URL, KEY, session(NOW+30), UID, now=NOW, transport=httpx.MockTransport(handler))
+    assert len(calls)==1 and auth.refresh_token=='NEW_REFRESH'
+
+
+def test_fresh_session_requires_no_auth_request_and_identity_change_is_rejected():
+    auth=session()
+    assert A.renew_reader(URL,KEY,auth,UID,now=NOW) is auth
+    with pytest.raises(StorageReadError):
+        A.renew_reader(URL,KEY,auth,OTHER,now=NOW)
+
+
+@pytest.mark.parametrize('status',[302,401,403,500])
+def test_auth_failures_do_not_include_response_body_or_password(status):
+    with pytest.raises(StorageReadError) as error:
+        A.login_reader(URL,KEY,'edge@example.test','SECRET_PASSWORD',UID,now=NOW,
+                       transport=httpx.MockTransport(lambda req:httpx.Response(status,text='SECRET_RESPONSE')))
+    assert 'SECRET' not in str(error.value)
+
+
+def test_connection_error_and_malformed_json_are_safe():
+    def handler(request):
+        raise httpx.ConnectError('SECRET '+str(request.url),request=request)
+    for transport in (httpx.MockTransport(handler),httpx.MockTransport(lambda r:httpx.Response(200,text='not-json'))):
+        with pytest.raises(StorageReadError) as error:
+            A.login_reader(URL,KEY,'edge@example.test','SECRET',UID,now=NOW,transport=transport)
+        assert 'SECRET' not in str(error.value)
+
+
+def test_admin_or_nonpublic_key_is_rejected_before_any_request():
+    for key in ('sb_secret_key',jwt(role='service_role'),jwt()):
+        with pytest.raises(StorageReadError):
+            A.login_reader(URL,key,'edge@example.test','password',UID,now=NOW)
+
+
+def test_latest_uses_raw_snapshots_not_newer_replay_or_logs():
+    prefixes=[]
+    def handler(request):
+        assert request.method=='POST' and request.url.path=='/storage/v1/object/list/spx-snapshots'
+        assert request.headers['authorization']=='Bearer '+jwt()
+        body=json.loads(request.content);prefixes.append(body['prefix'])
+        assert body['sortBy']=={'column':'name','order':'desc'}
+        if not body['prefix']:
+            return httpx.Response(200,json=[{'name':'replay'},{'name':'2026-W43'},{'name':'2026-W42'}])
+        assert body['prefix']=='2026-W43/snapshots'
+        return httpx.Response(200,json=[{'name':'SPX_CBOE_20261020_150000.json.gz','updated_at':'a'},
+                                       {'name':'SPX_CBOE_20261021_160000.json.gz','updated_at':'b'},
+                                       {'name':'log.json'},{'name':'SPX_CBOE_20261399_999999.json.gz'}])
+    ref=A.latest_snapshot(URL,KEY,session(),now=NOW,transport=httpx.MockTransport(handler))
+    assert ref.path=='2026-W43/snapshots/SPX_CBOE_20261021_160000.json.gz'
+    assert ref.updated_at=='b' and prefixes==['','2026-W43/snapshots']
+
+
+def test_pagination_and_fallback_to_previous_archive_week(monkeypatch):
+    monkeypatch.setattr(A,'PAGE_SIZE',2)
+    def handler(request):
+        body=json.loads(request.content)
+        prefix,offset=body['prefix'],body['offset']
+        if not prefix:
+            return httpx.Response(200,json=[{'name':'replay'},{'name':'2026-W43'}] if offset==0 else [{'name':'2026-W42'}])
+        if prefix=='2026-W43/snapshots':return httpx.Response(200,json=[])
+        return httpx.Response(200,json=[{'name':'SPX_CBOE_20261016_140000.json.gz'}])
+    assert A.latest_snapshot(URL,KEY,session(),now=NOW,transport=httpx.MockTransport(handler)).path.startswith('2026-W42/')
+
+
+def test_pagination_limit_fails_instead_of_silently_using_incomplete_results(monkeypatch):
+    monkeypatch.setattr(A,'PAGE_SIZE',1);monkeypatch.setattr(A,'MAX_PAGES',1)
+    with pytest.raises(StorageReadError,match='paginazione'):
+        A.latest_snapshot(URL,KEY,session(),now=NOW,transport=httpx.MockTransport(lambda r:httpx.Response(200,json=[{'name':'2026-W43'}])))
+
+
+def test_download_uses_only_get_and_rejects_replay_or_other_paths():
+    ref=A.SnapshotRef('2026-W43/snapshots/SPX_CBOE_20261021_160000.json.gz','')
+    def handler(request):
+        assert request.method=='GET'
+        assert request.url.path.endswith('/spx-snapshots/'+ref.path)
+        return httpx.Response(200,content=b'PRIVATE_SNAPSHOT')
+    assert A.download_snapshot(URL,KEY,session(),ref,now=NOW,transport=httpx.MockTransport(handler))==b'PRIVATE_SNAPSHOT'
+    for path in ('replay/2026-W43/file.json','2026-W43/logs/a.json','../x.json'):
+        with pytest.raises(StorageReadError):
+            A.download_snapshot(URL,KEY,session(),A.SnapshotRef(path,''),now=NOW)
+
+
+def configured_app():
+    app=AppTest.from_file(str(ROOT/'edge_streamlit.py'))
+    app.secrets['SUPABASE_URL']=URL
+    app.secrets['SUPABASE_ANON_KEY']=KEY
+    app.secrets['EDGE_READER_USER_ID']=UID
+    app.secrets['EDGE_ARCHIVE_ENABLED']=True
+    return app
+
+
+def test_public_page_cannot_read_private_archive_without_login(monkeypatch):
+    monkeypatch.setattr(A,'latest_snapshot',lambda *a,**k:pytest.fail('Anonymous storage request'))
+    app=configured_app().run(timeout=20)
+    assert not app.exception and not app.error and len(app.metric)==0
+    assert [box.label for box in app.text_input]==['Email Edge','Password Edge']
+    assert len(app.get('form'))==1
+
+
+def test_private_login_automatic_selection_cached_rerun_and_logout(monkeypatch):
+    calls=[]
+    monkeypatch.setattr(A,'login_reader',lambda *a,**k:session(expiry=10**10))
+    monkeypatch.setattr(A,'renew_reader',lambda *a,**k:a[2])
+    def latest(*args,**kwargs):
+        calls.append('list');return A.SnapshotRef('2026-W43/snapshots/SPX_CBOE_20261021_160000.json.gz','1')
+    monkeypatch.setattr(A,'latest_snapshot',latest)
+    def download(*args,**kwargs):
+        calls.append('get');return (ROOT/'fixtures/synthetic_cboe_spx.json').read_bytes()
+    monkeypatch.setattr(A,'download_snapshot',download)
+    app=configured_app().run(timeout=20)
+    app.text_input[0].set_value('edge@example.test');app.text_input[1].set_value('PRIVATE_PASSWORD')
+    app.button[0].click().run(timeout=20)
+    assert not app.exception and not app.error and len(app.metric)==5
+    assert calls==['list','get']
+    app.selectbox[0].set_value('0DTE').run(timeout=20)
+    assert not app.exception and len(app.metric)==5 and calls==['list','get']
+    next(button for button in app.button if button.label=='Esci da Edge').click().run(timeout=20)
+    assert not app.exception and len(app.metric)==0
+    assert 'edge_archive_raw' not in app.session_state and 'edge_reader_session' not in app.session_state
+    assert len(app.text_input)==2
+
+
+def test_legacy_server_token_cannot_expose_private_data_to_public_page():
+    app=AppTest.from_file(str(ROOT/'edge_streamlit.py'))
+    app.secrets['SUPABASE_READ_TOKEN']='LEGACY_PRIVATE_TOKEN'
+    app.secrets['SUPABASE_SNAPSHOT_SIGNED_URL']='PRIVATE_URL'
+    app.run(timeout=20)
+    assert not app.exception and len(app.metric)==0
+    assert 'Oggetto Supabase privato' not in app.radio[0].options
+    assert 'Fotografia con URL firmato' not in app.radio[0].options

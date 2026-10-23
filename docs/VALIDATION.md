@@ -8,8 +8,8 @@ Verifiche nell'ambiente di sviluppo, 23 ottobre 2026, Python 3.12.14:
 | Ambiente pulito con solo `requirements.txt` | Avvio e calcolo sintetico Streamlit verificati senza FastAPI o pytest |
 | `python -m pip check` | Nessuna incompatibilità rilevata |
 | Suite originale Edge | 212 test passati |
-| Suite completa, inclusi wrapper, Storage e Streamlit | 268 passati, 1 saltato |
-| Stessa suite con Python 3.14.9 e PyArrow 24.0.0 | 268 passati, 1 saltato |
+| Suite completa, inclusi wrapper, Storage e Streamlit | 289 passati, 1 saltato |
+| Stessa suite con Python 3.14.9 e PyArrow 24.0.0 | 289 passati, 1 saltato |
 | Test reale SPX | Saltato esplicitamente: fotografia assente |
 | Verifica scalare indipendente sul nuovo esempio sintetico | 40 contratti, NET e gross riconciliati |
 | Streamlit AppTest | Avvio senza Secrets, calcolo sintetico nelle tre modalità, sorgenti non configurate |
@@ -84,3 +84,25 @@ festività, DST, scadenze e riconciliazione del profilo.
 Il permesso di lavorare e caricare codice nel repository Edge è già stato dato.
 Non occorre una nuova conferma generica per proseguire lo sviluppo. Questi blocchi
 riguardano materiali, credenziali o sessioni esterne non presenti nell'ambiente.
+
+
+## Nuovo archivio automatico privato
+
+Il client Auth/Storage e il form Streamlit sono predisposti ma il progetto reale
+non e' stato configurato da questa sessione. I 21 test aggiuntivi simulano login,
+rifiuto di un altro UID e ruoli privilegiati, rinnovo dei token, richieste di
+elenco paginate, selezione delle sole fotografie raw, download GET, protezione
+dei dati per visitatori anonimi, riuso nella sessione e pulizia al logout.
+La suite completa passa su Python 3.12 e 3.14.9: 289 passati, 1 test reale saltato.
+Le modalita' pubbliche restano caricamento locale e demo; l'automatismo richiede
+login e resta disattivato senza configurazione e policy dedicate.
+Non sono stati caricati nel repository il rapporto privato ricevuto o chiavi.
+
+La policy e' stata inoltre eseguita su PostgreSQL 17.11 in un cluster locale
+usa e getta, con socket privato e dati esclusivamente sintetici. Il comando
+riproducibile e' `python scripts/test_reader_policy.py --pg-bin-dir DIR`.
+Verificati: lettura raw per il solo UID, esclusione anonimi/altri utenti/log/replay,
+INSERT e TRUNCATE rifiutati, UPDATE e DELETE con zero righe interessate,
+accesso del writer proprietario invariato, rifiuto dei baseline non sicuri e
+rollback della CREATE POLICY se la verifica successiva non riesce.
+Questo test non e' una prova sul progetto Supabase di produzione.

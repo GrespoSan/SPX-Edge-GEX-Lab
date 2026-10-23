@@ -19,63 +19,19 @@ FastAPI, una base dati o una service-role key per l'app Streamlit.
 L'app parte senza Secrets; il caricamento manuale e l'esempio sintetico restano
 disponibili anche senza Supabase.
 
-## Lettura del bucket privato
+## Lettura automatica del bucket privato
 
-Il bucket `spx-snapshots` non deve essere reso pubblico. Non creare o modificare
-policy, ruoli, utenti, funzioni o oggetti nel progetto Supabase esistente.
-Usare soltanto un accesso compatibile già autorizzato dal proprietario.
-Il modulo `edge_storage.py` usa esclusivamente GET di un singolo oggetto,
-con TLS verificato, senza redirect, senza elenchi o generazione di URL firmati.
+Seguire la procedura aggiornata in [AUTOMATIC_ACCESS.md](AUTOMATIC_ACCESS.md).
+La nuova interfaccia richiede il login dell'utenza dedicata prima di accedere
+ai dati privati. Configurare soltanto URL, chiave publishable/anon, User UID e
+flag di attivazione nei Secrets della sola Edge; niente password Auth, JWT
+condivisi, service-role key o URL firmati globali.
 
-Scegliere **una** delle seguenti configurazioni nel pannello Secrets della
-**nuova app Streamlit**, senza inserire valori nel repository o in chat.
-
-### URL firmato già disponibile
-
-Impostare `SUPABASE_SNAPSHOT_SIGNED_URL` con un URL già emesso, limitato a una
-fotografia specifica sotto `/storage/v1/object/sign/spx-snapshots/`.
-Il dominio deve appartenere a un progetto `*.supabase.co`.
-Se `SUPABASE_URL` è configurato, il dominio deve corrispondere a quel progetto.
-Selezionare «Fotografia con URL firmato» nell'app e premere «Leggi fotografia».
-L'app non riceve né usa la chiave amministrativa necessaria per emettere URL.
-La scadenza del link deve essere gestita fuori dall'app da un soggetto già
-abilitato; Edge non rinnova o crea firme. L'intero URL è un segreto.
-
-### Identità già limitata alla lettura
-
-Impostare:
-
-| Secret | Significato |
-| --- | --- |
-| `SUPABASE_URL` | URL HTTPS del progetto esistente |
-| `SUPABASE_ANON_KEY` | Chiave publishable/anon del progetto, mai una chiave privilegiata |
-| `SUPABASE_READ_TOKEN` | JWT di un'identità esistente, con privilegi limitati alla lettura degli oggetti necessari |
-| `SUPABASE_READ_ONLY_CONFIRMED` | `true` solo dopo la verifica dei privilegi esistenti da parte del proprietario |
-
-Selezionare «Oggetto Supabase privato», indicare il percorso completo relativo al
-bucket e premere «Leggi fotografia». Non inserire il nome del bucket nel percorso.
-Una chiave publishable/anon da sola **non prova** l'accesso al bucket privato.
-La conferma non restringe i privilegi: registra una verifica già svolta.
-L'esito positivo di un GET non dimostra che l'identità sia di sola lettura.
-Non provare upload o cancellazioni per controllarlo.
-
-L'app rifiuta chiavi `sb_secret_*` e JWT con ruoli privilegiati noti prima di
-eseguire richieste. Questa esclusione locale non sostituisce il controllo RLS
-del proprietario; il server Supabase verifica l'autenticità del JWT.
-Non configurare service-role key, credenziali del database o account amministrativi.
-Se non esiste un accesso compatibile, fermare questa integrazione e usare
-il caricamento manuale; eventuali modifiche Supabase non rientrano nel mandato.
-
-## Segreti, dati e sessioni
-
-Il modello `.streamlit/secrets.toml.example` contiene solo commenti e placeholder.
-In locale, `.streamlit/secrets.toml`, `.env` e `local-data/` sono esclusi da Git.
-La pubblicazione Codex non trasferisce automaticamente i Secrets a Streamlit.
-Le fotografie non sono conservate in cache condivise: solo nella sessione che
-le ha lette. Cambiare sorgente, percorso o credenziali elimina la lettura precedente.
-Errori HTTP e di connessione non mostrano URL firmati, token o risposte remote.
-Il download remoto è limitato a 25 MiB; il JSON decompresso a 100 MiB.
-La visibilità dell'app va verificata prima di abilitare dati privati.
+Il bucket resta privato. Storage riceve solo richieste di elenco e download;
+le POST Auth servono al login e rinnovo della sessione, non a scrivere fotografie.
+La policy dedicata e' una SELECT per un solo UID e per i soli percorsi raw SPX;
+va installata e verificata prima di attivare il collegamento.
+Il caricamento locale e il demo restano utilizzabili senza queste impostazioni.
 
 ## Verifica prima e dopo il deploy
 
