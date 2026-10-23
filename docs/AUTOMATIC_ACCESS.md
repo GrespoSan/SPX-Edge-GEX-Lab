@@ -44,7 +44,8 @@ Per leggere anche il differenziale ES-SPX gia' pubblicato, eseguire una volta
 `supabase/enable_edge_shared_basis.sql` con lo stesso UID. Aggiunge solo SELECT
 su `mt4/latest.csv`, senza cambiare la policy delle fotografie o i Secrets.
 Il file e il publisher esistenti restano invariati; Edge ne legge solo i metadati.
-La fonte condivisa non e' ancora stata verificata online come lettore Edge.
+La schermata successiva del proprietario conferma la lettura online del
+differenziale condiviso da parte di Edge.
 
 La cartella settimanale piu' recente viene cercata nell'elenco del bucket. Nella
 prima settimana con fotografie grezze SPX viene selezionato il file con stamp

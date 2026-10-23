@@ -178,6 +178,11 @@ La policy raw originaria rimane identica; il writer proprietario mantiene access
 Verificati installazione ripetibile, guard di baseline e rollback su errore.
 
 GitHub riporta successo per il workflow MT4 esistente, ma non e' una lettura
-Supabase eseguita come utente Edge. Restano da applicare il nuovo SELECT con lo
-stesso UID e confermare la lettura reale nell'app. Nessuna credenziale privilegiata
+Supabase eseguita dal runner come utente Edge. La schermata successiva del
+proprietario mostra in Edge i metadati letti dal file condiviso e conferma il
+funzionamento della lettura online. Nessuna credenziale privilegiata
 e' presente nel runner. Nessuna modifica a repository, job, dati o link MT4 Serafini.
+
+La visualizzazione riporta ora data e ora della fotografia CBOE sopra le metriche,
+valutazione Edge e pubblicazione del differenziale in Europe/Rome, con CET/CEST
+automatici. I timestamp originali UTC negli export e i calcoli restano invariati.

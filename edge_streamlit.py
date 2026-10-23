@@ -7,6 +7,7 @@ import json
 from datetime import datetime
 from pathlib import Path
 import time
+from zoneinfo import ZoneInfo
 
 import plotly.graph_objects as go
 import streamlit as st
@@ -23,6 +24,13 @@ ROOT = Path(__file__).resolve().parent
 UPLOAD = "Carica fotografia CBOE"
 DEMO = "Esempio sintetico (test)"
 AUTO = "Archivio SPX automatico"
+
+
+def italian_time(value):
+    stamp = datetime.fromisoformat(value.replace('Z', '+00:00'))
+    if stamp.tzinfo is None:
+        raise ValueError('Timestamp privo di fuso orario.')
+    return stamp.astimezone(ZoneInfo('Europe/Rome')).strftime('%d/%m/%Y %H:%M:%S %Z')
 
 
 def setting(name, default=""):
@@ -157,7 +165,7 @@ def price_conversion(result, synthetic, target, archive_context=None):
                                       help='Letto dai metadati già pubblicati da APP SPX, arrotondato al punto intero. Eventuale correzione manuale valida solo per questa data.')
     estimate = record['estimate']
     if estimate is not None:
-        st.caption(f"Differenziale pubblicato {estimate['basis']:.6f} → {rounded_basis(estimate['basis']):+d} punti · seduta {estimate['reference_date']} · pubblicato {estimate['published_utc']}. {estimate['source']}.")
+        st.caption(f"Differenziale pubblicato {estimate['basis']:.6f} → {rounded_basis(estimate['basis']):+d} punti · seduta {estimate['reference_date']} · pubblicazione (Italia): {italian_time(estimate['published_utc'])}. {estimate['source']}.")
     if record['error']:
         st.caption(record['error'])
     if archive_context is None and not synthetic:
@@ -183,7 +191,7 @@ def price_conversion(result, synthetic, target, archive_context=None):
 def render_result(result, synthetic=False, basis_target=None, archive_context=None):
     if synthetic:
         st.caption("Risultati su esempio sintetico; nessuna verifica su dati reali.")
-    st.caption(f"{result['symbol']} | Fotografia UTC: {result['timestamp']} | Valutazione Edge: {result['valuation']}")
+    st.caption(f"{result['symbol']} | Valutazione Edge (Italia): {italian_time(result['valuation'])}")
     target = basis_target or datetime.fromisoformat(result['timestamp']).date()
     conversion = price_conversion(result, synthetic, target, archive_context)
     offset = conversion['offset']
@@ -192,6 +200,7 @@ def render_result(result, synthetic=False, basis_target=None, archive_context=No
     suffix = ' ES' if translated else ' ' + result['symbol']
     def price(value):
         return None if value is None else value + shift
+    st.markdown(f"**Fotografia CBOE · ora italiana: {italian_time(result['timestamp'])}**")
     columns = st.columns(5)
     for column, label, value in zip(columns,
             ("Spot equivalente ES" if translated else 'Spot' + suffix,

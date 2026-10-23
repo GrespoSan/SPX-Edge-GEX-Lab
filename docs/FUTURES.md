@@ -73,8 +73,9 @@ non una quotazione corrente del future.
 
 Il workflow MT4 gia' esistente risulta completato con successo su GitHub. Il
 runner non ha eseguito workflow, modificato repository Serafini o letto il file
-privato con credenziali amministrative. La lettura reale come utente Edge resta
-da confermare dopo l'applicazione del nuovo SELECT da parte del proprietario.
+privato con credenziali amministrative. La successiva schermata del proprietario conferma la lettura reale in Edge:
+mostra differenziale pubblicato, riferimento, pubblicazione e fonte dell'archivio
+condiviso. Il runner continua a non disporre della sessione privata.
 Test HTTP simulati verificano lettura dell'intestazione, rifiuto di date diverse
 e metadati errati, nessun accesso anonimo e nessuna chiamata Yahoo dall'interfaccia.
 Il test PostgreSQL locale verifica policy, isolamento, assenza di scritture e
