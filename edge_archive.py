@@ -183,3 +183,29 @@ def download_snapshot(project_url, api_key, session, snapshot, *, transport=None
     _nonprivileged(session.access_token, jwt_required=True)
     return _download(_project_url(project_url) + '/storage/v1/object/authenticated/spx-snapshots/' + snapshot.path,
                      {'apikey': api_key, 'Authorization': 'Bearer ' + session.access_token}, transport)
+
+def snapshots_for_day(project_url, api_key, session, selected_day, *, transport=None, now=None):
+    """List existing original SPX snapshots for an archive date; no writes."""
+    current = time.time() if now is None else now
+    if not isinstance(session, ReaderSession) or session.expires_at <= current + 15:
+        raise StorageReadError('Sessione scaduta: accedere nuovamente.')
+    if not isinstance(selected_day, date):
+        raise StorageReadError('Data archivio non valida.')
+    year, week, _ = selected_day.isocalendar()
+    prefix = f'{year}-W{week:02d}/snapshots'
+    expected = selected_day.strftime('%Y%m%d')
+    found = []
+    for rows in _entries(_project_url(project_url), api_key, session.access_token, prefix, transport):
+        for row in rows:
+            name = row.get('name', '')
+            if not isinstance(name, str):
+                continue
+            match = RAW_NAME.fullmatch(name)
+            if not match or match[1] != expected:
+                continue
+            try:
+                datetime.strptime(match[1] + match[2], '%Y%m%d%H%M%S')
+            except ValueError:
+                continue
+            found.append(SnapshotRef(prefix + '/' + name, str(row.get('updated_at') or '')))
+    return sorted(found, key=lambda item: item.path)
