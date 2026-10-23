@@ -176,7 +176,6 @@ def price_conversion(result, synthetic, target, archive_context=None):
                                       help='Letto dai metadati già pubblicati da APP SPX, arrotondato al punto intero. Eventuale correzione manuale valida solo per questa data.')
     estimate = record['estimate']
     if estimate is not None:
-        st.caption(f"Differenziale pubblicato {estimate['basis']:.6f} → {rounded_basis(estimate['basis']):+d} punti · seduta {estimate['reference_date']} · pubblicazione (Italia): {italian_time(estimate['published_utc'])}. {estimate['source']}.")
     if record['error']:
         st.caption(record['error'])
     if archive_context is None and not synthetic:
@@ -191,8 +190,6 @@ def price_conversion(result, synthetic, target, archive_context=None):
         st.info('Conversione ES non disponibile: i valori seguenti restano in SPX. Serve un differenziale condiviso valido per questa data.')
         return {'unit': 'SPX', 'offset': None, 'target_date': day}
     automatic = not record['manual'] and estimate is not None
-    st.caption(f"Livelli ES equivalenti = SPX {offset:+g} punti · data {day} · spot SPX originale {result['spot']:,.2f}. Il valore equivalente non è una quotazione ES in tempo reale.")
-    st.caption('Il differenziale è riferito al future continuo ES=F; può differire dal contratto specifico del tuo grafico. GEX e regime restano quelli delle opzioni SPX.')
     return {'unit': 'ES_equivalent', 'offset': offset, 'target_date': day,
             'source': estimate['source'] if automatic else 'Differenziale verificato inserito dall’utente',
             'reference_date': estimate['reference_date'] if automatic else None,
