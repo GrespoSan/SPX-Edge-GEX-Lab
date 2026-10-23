@@ -216,16 +216,16 @@ def render_result(result, synthetic=False, basis_target=None, archive_context=No
     frame = result["rows"]
     if not frame.empty:
         chart = go.Figure()
-        chart.add_bar(x=frame["strike"] + shift, y=frame["call_gex"] / 1e9, name="Call GEX")
-        chart.add_bar(x=frame["strike"] + shift, y=frame["put_gex"] / 1e9, name="Put GEX")
-        chart.add_scatter(x=frame["strike"] + shift, y=frame["net_gex"] / 1e9, name="NET GEX", mode="lines")
+        chart.add_bar(x=frame["strike"] + shift, y=frame["call_gex"] / 1e9, name="Call GEX", marker_color="#22b573")
+        chart.add_bar(x=frame["strike"] + shift, y=frame["put_gex"] / 1e9, name="Put GEX", marker_color="#e64b4b")
+        chart.add_scatter(x=frame["strike"] + shift, y=frame["net_gex"] / 1e9, name="NET GEX", mode="lines", line=dict(color="#f4a2b3", width=2))
         spot_display = price(result["spot"])
         chart.add_vline(x=spot_display, line_dash="dot", line_color="#b5c6de")
         # Display annotations above the bars, staggered to avoid text collisions.
         markers = [
-            ("Put Wall", price(result["put_wall"]), "#26b6a6"),
+            ("Put Wall", price(result["put_wall"]), "#e64b4b"),
             ("Gamma Flip", price(result["flip"]), "#e7ae4e"),
-            ("Call Wall", price(result["call_wall"]), "#e27c82"),
+            ("Call Wall", price(result["call_wall"]), "#22b573"),
         ]
         for idx, (label, value, color) in enumerate(markers):
             if value is not None:
