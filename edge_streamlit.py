@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import os
+import hashlib
+import json
 from pathlib import Path
 import time
 
@@ -12,6 +14,7 @@ from streamlit.errors import StreamlitSecretNotFoundError
 from edge_clone_engine import MODES, analyze
 from edge_storage import StorageReadError
 from edge_archive import login_reader, renew_reader, latest_snapshot, download_snapshot
+from edge_verification import verify_snapshot
 
 ROOT = Path(__file__).resolve().parent
 UPLOAD = "Carica fotografia CBOE"
@@ -37,7 +40,7 @@ def archive_configuration():
 
 def clear_private_session():
     for key in ('edge_reader_session', 'edge_archive_raw', 'edge_archive_ref',
-                'edge_archive_fetched', 'edge_raw'):
+                'edge_archive_fetched', 'edge_archive_analysis', 'edge_raw'):
         st.session_state.pop(key, None)
 
 
@@ -157,13 +160,28 @@ def automatic_archive(mode):
         reference = st.session_state['edge_archive_ref']
         st.caption('Aggiornamento automatico ogni 2 minuti mentre questa pagina è aperta. Fotografia selezionata dalla settimana di archivio più recente disponibile.')
         st.caption('File archiviato: ' + reference.path)
-        result = analyze(st.session_state['edge_archive_raw'], mode)
-        if result['symbol'] != 'SPX':
-            raise ValueError('Il file selezionato non contiene una catena SPX.')
+        raw = st.session_state['edge_archive_raw']
+        analysis_key = (hashlib.sha256(raw).hexdigest(), mode)
+        cached = st.session_state.get('edge_archive_analysis')
+        if cached is None or cached[0] != analysis_key:
+            st.session_state.pop('edge_archive_analysis', None)
+            result = analyze(raw, mode)
+            if result['symbol'] != 'SPX':
+                raise ValueError('Il file selezionato non contiene una catena SPX.')
+            report = verify_snapshot(raw, mode)
+            cached = (analysis_key, result, report)
+            st.session_state['edge_archive_analysis'] = cached
+        _, result, report = cached
+        st.success(f"Verifica aritmetica superata: {report['contracts_cross_checked']} contratti, NET e Gross GEX riconciliati.")
         render_result(result)
+        st.download_button('Scarica verifica Edge JSON', json.dumps(report, indent=2, allow_nan=False),
+                           file_name=f"EDGE_verifica_{result['sha256'][:12]}.json",
+                           mime='application/json', on_click='ignore')
+        st.caption('Confronto con formula scalare separata; selezione dei contratti e tempi residui sono condivisi. Non certifica origine dei dati o posizioni dealer.')
     except StorageReadError as error:
         st.session_state.pop('edge_archive_raw', None)
         st.session_state.pop('edge_archive_ref', None)
+        st.session_state.pop('edge_archive_analysis', None)
         st.error(str(error))
     except ValueError as error:
         st.error(str(error))

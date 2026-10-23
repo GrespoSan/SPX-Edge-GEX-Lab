@@ -1,5 +1,23 @@
 # Verifiche e stato di pubblicazione
 
+## Stato online confermato dal proprietario
+
+Il 23 ottobre 2026 il proprietario ha fornito schermate del risultato della query
+`edge_spx_raw_reader_v1` (ruolo authenticated, solo SELECT) e dell'app autenticata
+su [Streamlit Community Cloud](https://spx-edge-gex-lab-djvbrdhckns6fv4exbgxos.streamlit.app/).
+La schermata dell'app mostra selezione automatica di una fotografia SPX reale
+archiviata, quattro scadenze, 1.739 contratti validi su 1.880 e risultati Edge.
+Questo conferma avvio, login, lettura privata e completamento del calcolo nel
+browser del proprietario. Nessun file originale, UID o segreto viene pubblicato
+come prova nel repository.
+
+Il runner resta privo di accesso alla sessione privata e ai byte di quella
+fotografia: il test reale locale non e' stato eseguito. La schermata precede il
+nuovo controllo scalare automatico descritto sotto e non ne dimostra l'esito.
+L'aggiornamento con una fotografia successiva non e' ancora stato osservato.
+
+## Verifiche locali
+
 Verifiche nell'ambiente di sviluppo, 23 ottobre 2026, Python 3.12.14:
 
 | Controllo | Esito |
@@ -8,8 +26,8 @@ Verifiche nell'ambiente di sviluppo, 23 ottobre 2026, Python 3.12.14:
 | Ambiente pulito con solo `requirements.txt` | Avvio e calcolo sintetico Streamlit verificati senza FastAPI o pytest |
 | `python -m pip check` | Nessuna incompatibilità rilevata |
 | Suite originale Edge | 212 test passati |
-| Suite completa, inclusi wrapper, Storage e Streamlit | 289 passati, 1 saltato |
-| Stessa suite con Python 3.14.9 e PyArrow 24.0.0 | 289 passati, 1 saltato |
+| Suite completa, inclusi wrapper, Storage e Streamlit | 290 passati, 1 saltato |
+| Stessa suite con Python 3.14.9 e PyArrow 24.0.0 | 290 passati, 1 saltato |
 | Test reale SPX | Saltato esplicitamente: fotografia assente |
 | Verifica scalare indipendente sul nuovo esempio sintetico | 40 contratti, NET e gross riconciliati |
 | Streamlit AppTest | Avvio senza Secrets, calcolo sintetico nelle tre modalità, sorgenti non configurate |
@@ -17,8 +35,8 @@ Verifiche nell'ambiente di sviluppo, 23 ottobre 2026, Python 3.12.14:
 | Protocollo WebSocket reale su Python 3.14.9 | Pagina iniziale e cinque metriche sintetiche ricevute, bind predefinito dual-stack |
 | Frontend originale, Node.js 24.19.0 | `npm ci` e `npm run build` completati |
 | Codice originale `gexlab/` | 25 file Python identici allo ZIP |
-| Richieste Supabase reali | Non eseguite: accesso di sola lettura non disponibile |
-| Streamlit Community Cloud | Deploy avviato dal proprietario, server partito secondo il log; caricamento infinito segnalato nel browser, URL non verificabile dal runner |
+| Richieste Supabase reali dal runner | Non eseguite: nessuna credenziale privata nel runner; lettura online confermata dalla schermata del proprietario |
+| Streamlit Community Cloud | App funzionante nel browser del proprietario, con fotografia reale e risultati; URL non raggiungibile dal proxy del runner |
 
 I test Storage usano `httpx.MockTransport`, senza scritture remote o test di
 privilegi tramite tentativi di modifica. Controllano GET, bucket e host,
@@ -44,8 +62,8 @@ controlli CORS, XSRF o TLS.
 
 La connessione a `spx-edge-gex-lab-djvbrdhckns6fv4exbgxos.streamlit.app` dal
 runner rimane bloccata dal proxy prima di raggiungere l'app. Il funzionamento
-online non è quindi confermato. Servono il nuovo esito dopo il riavvio Edge e,
-se il caricamento persiste, il messaggio della pagina o della console del browser.
+online e' stato successivamente confermato dalle schermate del proprietario;
+non e' una verifica HTTP o browser eseguita direttamente dal runner.
 
 ## Risultato sintetico riproducibile
 
@@ -69,31 +87,33 @@ indipendente dell'origine, delle quotazioni o delle convenzioni del mercato.
 I test separati verificano tempo residuo, contratti AM già regolati, chiusura,
 festività, DST, scadenze e riconciliazione del profilo.
 
-## Passaggi che richiedono materiali o accessi esterni
+## Verifica aritmetica della fotografia reale
 
-1. Fornire una fotografia SPX CBOE reale autorizzata. Il proprietario ha confermato
-   che non è disponibile un accesso Supabase di sola lettura: integrazione
-   remota lasciata disattivata, senza aggiungere requisiti di credenziali.
-2. Il proprietario deve verificare i privilegi della credenziale esistente;
-   non sono autorizzate modifiche al progetto Supabase.
-3. Il proprietario ha creato l'app nel proprio account Streamlit. Questa sessione
-   non dispone di accesso alla gestione Streamlit per riavviarla o ispezionare
-   direttamente i log del deploy.
-4. Verificare poi l'URL effettivo con accesso, fotografia e calcolo.
+L'archivio automatico ora confronta ogni nuova fotografia/modalita' con la formula
+scalare separata di `edge_verification.py`. Il controllo riconcilia il GEX di ogni
+contratto valido e i totali NET/Gross prima di mostrare i risultati; se fallisce,
+mostra un errore senza metriche o rapporto di successo. Non modifica il motore
+originale, i dati o i permessi Supabase.
 
-Il permesso di lavorare e caricare codice nel repository Edge è già stato dato.
-Non occorre una nuova conferma generica per proseguire lo sviluppo. Questi blocchi
-riguardano materiali, credenziali o sessioni esterne non presenti nell'ambiente.
+Il rapporto `Scarica verifica Edge JSON` contiene hash del file, modello,
+scadenze, numero di contratti e totali del motore e della formula scalare, senza
+credenziali o catena originale. Risultati e rapporto restano nella sessione
+privata e vengono eliminati al logout. Un poll con file e modalita' invariati
+riusa il controllo precedente; un file diverso o cambio di modalita' lo ripete.
 
+Il confronto riusa selezione e tempi residui del wrapper. Non certifica fonte,
+qualita' delle quotazioni, posizioni dealer o convenzioni di regolamento.
+Resta da osservare l'esito del nuovo controllo sulla fotografia reale online,
+o eseguire `scripts/verify_snapshot.py` sui byte originali autorizzati.
 
 ## Nuovo archivio automatico privato
 
-Il client Auth/Storage e il form Streamlit sono predisposti ma il progetto reale
-non e' stato configurato da questa sessione. I 21 test aggiuntivi simulano login,
+Il client Auth/Storage e il form Streamlit sono stati configurati dal proprietario;
+questa sessione non ha eseguito modifiche remote al progetto Supabase. I test aggiuntivi simulano login,
 rifiuto di un altro UID e ruoli privilegiati, rinnovo dei token, richieste di
 elenco paginate, selezione delle sole fotografie raw, download GET, protezione
 dei dati per visitatori anonimi, riuso nella sessione e pulizia al logout.
-La suite completa passa su Python 3.12 e 3.14.9: 289 passati, 1 test reale saltato.
+La suite completa passa su Python 3.12 e 3.14.9: 290 passati, 1 test reale saltato.
 Le modalita' pubbliche restano caricamento locale e demo; l'automatismo richiede
 login e resta disattivato senza configurazione e policy dedicate.
 Non sono stati caricati nel repository il rapporto privato ricevuto o chiavi.
@@ -106,3 +126,8 @@ INSERT e TRUNCATE rifiutati, UPDATE e DELETE con zero righe interessate,
 accesso del writer proprietario invariato, rifiuto dei baseline non sicuri e
 rollback della CREATE POLICY se la verifica successiva non riesce.
 Questo test non e' una prova sul progetto Supabase di produzione.
+
+Il successivo aggiornamento aggiunge un test di rifiuto dei risultati in caso di
+mancata riconciliazione e verifica riuso del rapporto, cambio di modalita' e
+pulizia al logout. I controlli usano la fotografia sintetica: non convertono il
+test reale locale saltato in un controllo eseguito.

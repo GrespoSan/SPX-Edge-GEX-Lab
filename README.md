@@ -114,5 +114,9 @@ Non avviare i feed live descritti nella documentazione upstream per questo fluss
 - [Documentazione originale upstream, conservata come riferimento](README_UPSTREAM.md)
 - [Licenza originale MIT](LICENSE)
 
-La presenza del codice e dei test nel repository **non attesta una pubblicazione
-online**: questa richiede un deploy separato e la verifica del suo URL effettivo.
+[App Edge online](https://spx-edge-gex-lab-djvbrdhckns6fv4exbgxos.streamlit.app/):
+il proprietario ha confermato il funzionamento con login dedicato, lettura privata
+e risultati su una fotografia SPX reale. L'archivio richiede autenticazione;
+caricamento locale ed esempio sintetico restano accessibili senza credenziali.
+Vedere [verifiche e limiti](docs/VALIDATION.md) per distinguere questa prova dai
+test locali e dal successivo confronto aritmetico automatico.

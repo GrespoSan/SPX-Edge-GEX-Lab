@@ -1,7 +1,8 @@
 # Archivio SPX automatico e privato per Edge
 
-Stato: codice predisposto e testato con risposte HTTP simulate; integrazione
-Supabase reale ancora disattivata. Nessuna modifica remota applicata.
+Stato: il proprietario ha applicato la policy dedicata, configurato i Secrets e
+mostrato l'app autenticata con risultati su una fotografia reale. Il runner non
+ha applicato modifiche al progetto Supabase. Vedere [verifiche e limiti](VALIDATION.md).
 
 ## Configurazione iniziale, una volta
 
@@ -68,9 +69,12 @@ o funzioni SECURITY DEFINER da esaminare. Prova le letture con il ruolo e UID
 esatti, esclude altri oggetti e verifica il mancato accesso per un altro UID.
 Non prova scritture reali contro gli oggetti di produzione.
 
-Restano necessari l'installazione da parte del proprietario, i Secrets e una
-prova online con fotografia reale. Le risposte HTTP simulate e il test sintetico
-non dimostrano la configurazione RLS o il funzionamento del progetto reale.
+L'installazione, i Secrets e la lettura reale sono stati confermati dalle
+schermate del proprietario. Resta da osservare il controllo aritmetico automatico
+aggiunto successivamente e l'arrivo di una nuova fotografia. Il rapporto JSON
+scaricabile dall'app consente di esaminare la riconciliazione senza condividere
+credenziali o scaricare manualmente la catena dal pannello Supabase. I test
+simulati locali restano distinti dalle prove online.
 La modifica alle autorizzazioni e' limitata al nuovo lettore: metodologia,
 repository, account esistenti, cron-job e collegamento MT4 Serafini restano fuori
 ambito. Non e' necessario rendere pubblico il bucket.

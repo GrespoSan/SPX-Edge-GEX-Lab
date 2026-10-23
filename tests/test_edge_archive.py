@@ -8,6 +8,7 @@ import pytest
 from streamlit.testing.v1 import AppTest
 
 import edge_archive as A
+import edge_verification as V
 from edge_storage import StorageReadError
 
 URL = 'https://exampleproject.supabase.co'
@@ -162,25 +163,68 @@ def test_public_page_cannot_read_private_archive_without_login(monkeypatch):
 
 def test_private_login_automatic_selection_cached_rerun_and_logout(monkeypatch):
     calls=[]
+    checks=[]
+    version=['1']
+    original_verify=V.verify_snapshot
+    def verify(raw,mode):
+        checks.append(mode)
+        return original_verify(raw,mode)
+    monkeypatch.setattr(V,'verify_snapshot',verify)
     monkeypatch.setattr(A,'login_reader',lambda *a,**k:session(expiry=10**10))
     monkeypatch.setattr(A,'renew_reader',lambda *a,**k:a[2])
     def latest(*args,**kwargs):
-        calls.append('list');return A.SnapshotRef('2026-W43/snapshots/SPX_CBOE_20261021_160000.json.gz','1')
+        calls.append('list');return A.SnapshotRef('2026-W43/snapshots/SPX_CBOE_20261021_160000.json.gz',version[0])
     monkeypatch.setattr(A,'latest_snapshot',latest)
     def download(*args,**kwargs):
-        calls.append('get');return (ROOT/'fixtures/synthetic_cboe_spx.json').read_bytes()
+        calls.append('get');return (ROOT/'fixtures/synthetic_cboe_spx.json').read_bytes()+b'\n'*int(version[0])
     monkeypatch.setattr(A,'download_snapshot',download)
     app=configured_app().run(timeout=20)
     app.text_input[0].set_value('edge@example.test');app.text_input[1].set_value('PRIVATE_PASSWORD')
     app.button[0].click().run(timeout=20)
     assert not app.exception and not app.error and len(app.metric)==5
     assert calls==['list','get']
+    assert checks==['Prossime 4 scadenze']
+    report=app.session_state['edge_archive_analysis'][2]
+    assert report['arithmetic_check']=='passed' and report['contracts_cross_checked']==40
+    assert report['independent_net_gex']==pytest.approx(report['net'])
+    assert report['independent_gross_gex']==pytest.approx(report['gross'])
+    assert app.success and '40 contratti' in app.success[0].value
+    assert len(app.get('download_button'))==2
+    assert 'PRIVATE' not in json.dumps(report)
+    next(button for button in app.button if button.label=='Aggiorna ora').click().run(timeout=20)
+    assert not app.exception and calls==['list','get','list']
+    assert checks==['Prossime 4 scadenze']
     app.selectbox[0].set_value('0DTE').run(timeout=20)
-    assert not app.exception and len(app.metric)==5 and calls==['list','get']
+    assert not app.exception and len(app.metric)==5 and calls==['list','get','list']
+    assert checks==['Prossime 4 scadenze','0DTE']
+    previous_hash=app.session_state['edge_archive_analysis'][2]['sha256']
+    version[0]='2'
+    next(button for button in app.button if button.label=='Aggiorna ora').click().run(timeout=20)
+    assert not app.exception and not app.error
+    assert calls==['list','get','list','list','get']
+    assert checks==['Prossime 4 scadenze','0DTE','0DTE']
+    assert app.session_state['edge_archive_analysis'][2]['sha256']!=previous_hash
     next(button for button in app.button if button.label=='Esci da Edge').click().run(timeout=20)
     assert not app.exception and len(app.metric)==0
     assert 'edge_archive_raw' not in app.session_state and 'edge_reader_session' not in app.session_state
+    assert 'edge_archive_analysis' not in app.session_state
     assert len(app.text_input)==2
+
+
+def test_arithmetic_mismatch_does_not_publish_unverified_metrics_or_report(monkeypatch):
+    monkeypatch.setattr(A,'login_reader',lambda *a,**k:session(expiry=10**10))
+    monkeypatch.setattr(A,'renew_reader',lambda *a,**k:a[2])
+    monkeypatch.setattr(A,'latest_snapshot',lambda *a,**k:A.SnapshotRef('2026-W43/snapshots/SPX_CBOE_20261021_160000.json.gz','1'))
+    monkeypatch.setattr(A,'download_snapshot',lambda *a,**k:(ROOT/'fixtures/synthetic_cboe_spx.json').read_bytes())
+    def mismatch(*args,**kwargs):
+        raise ValueError('NET GEX non riconciliato.')
+    monkeypatch.setattr(V,'verify_snapshot',mismatch)
+    app=configured_app().run(timeout=20)
+    app.text_input[0].set_value('edge@example.test');app.text_input[1].set_value('PRIVATE_PASSWORD')
+    app.button[0].click().run(timeout=20)
+    assert not app.exception and app.error[0].value=='NET GEX non riconciliato.'
+    assert not app.success and len(app.metric)==0 and len(app.get('download_button'))==0
+    assert 'edge_archive_analysis' not in app.session_state
 
 
 def test_legacy_server_token_cannot_expose_private_data_to_public_page():
