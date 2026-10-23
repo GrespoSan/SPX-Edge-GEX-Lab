@@ -9,6 +9,7 @@ from streamlit.testing.v1 import AppTest
 
 import edge_archive as A
 import edge_verification as V
+import edge_futures as F
 from edge_storage import StorageReadError
 
 URL = 'https://exampleproject.supabase.co'
@@ -146,6 +147,7 @@ def test_download_uses_only_get_and_rejects_replay_or_other_paths():
 
 def configured_app():
     app=AppTest.from_file(str(ROOT/'edge_streamlit.py'))
+    app.session_state['edge_price_view']='Indice SPX'
     app.secrets['SUPABASE_URL']=URL
     app.secrets['SUPABASE_ANON_KEY']=KEY
     app.secrets['EDGE_READER_USER_ID']=UID
@@ -235,3 +237,88 @@ def test_legacy_server_token_cannot_expose_private_data_to_public_page():
     assert not app.exception and len(app.metric)==0
     assert 'Oggetto Supabase privato' not in app.radio[0].options
     assert 'Fotografia con URL firmato' not in app.radio[0].options
+
+
+def test_es_translation_preserves_spx_math_and_exports_and_scopes_override_to_date(monkeypatch):
+    import streamlit as st
+    import pandas as pd
+    import io
+    from edge_clone_engine import analyze
+    raw=(ROOT/'fixtures/synthetic_cboe_spx.json').read_bytes()
+    original=analyze(raw,'Prossime 4 scadenze')
+    current_day=['21']
+    downloads={}
+    original_button=st.download_button
+    def capture(label,data,*args,**kwargs):
+        downloads[label]=data
+        return original_button(label,data,*args,**kwargs)
+    monkeypatch.setattr(st,'download_button',capture)
+    monkeypatch.setattr(A,'login_reader',lambda *a,**k:session(expiry=10**10))
+    monkeypatch.setattr(A,'renew_reader',lambda *a,**k:a[2])
+    monkeypatch.setattr(A,'latest_snapshot',lambda *a,**k:A.SnapshotRef(f'2026-W43/snapshots/SPX_CBOE_202610{current_day[0]}_160000.json.gz','1'))
+    monkeypatch.setattr(A,'download_snapshot',lambda *a,**k:raw)
+    calls=[]
+    def unavailable(target):
+        calls.append(target)
+        raise F.BasisUnavailable('Fonte non disponibile.')
+    monkeypatch.setattr(F,'download_basis',unavailable)
+    app=configured_app()
+    app.session_state['edge_price_view']='Future ES (equivalente)'
+    app.query_params['es_basis_date']='2026-10-21'
+    app.query_params['es_basis']='40'
+    app.run(timeout=20)
+    app.text_input[0].set_value('edge@example.test');app.text_input[1].set_value('PRIVATE_PASSWORD')
+    app.button[0].click().run(timeout=20)
+    assert not app.exception and not app.error and not calls
+    assert [m.value for m in app.metric[:3]]==['6,040.00','6,040.00','6,040.00']
+    assert app.metric[0].label=='Spot equivalente ES'
+    report=json.loads(downloads['Scarica verifica Edge JSON'])
+    assert report['net']==original['net'] and report['gross']==original['gross']
+    assert report['spot']==6000 and report['display_conversion']['offset']==40
+    assert report['display_conversion']['target_date']=='2026-10-21'
+    csv=pd.read_csv(io.BytesIO(downloads['Scarica profilo Edge CSV']))
+    assert (csv.strike_es==csv.strike_spx+40).all()
+    assert csv.net_gex.to_list()==pytest.approx(original['rows'].net_gex.to_list())
+    figures=[json.loads(element.proto.spec) for element in app.get('plotly_chart')]
+    import numpy as np
+    def array(value):
+        return np.frombuffer(base64.b64decode(value['bdata']),dtype=value['dtype']) if isinstance(value,dict) else np.array(value)
+    assert array(figures[0]['data'][0]['x'])==pytest.approx(original['rows'].strike.to_numpy()+40)
+    assert figures[0]['layout']['shapes'][0]['x0']==6040
+    assert array(figures[1]['data'][0]['x'])==pytest.approx(original['curve'].spot.to_numpy()+40)
+    app.radio[1].set_value('Indice SPX').run(timeout=20)
+    assert not app.exception and app.metric[0].value=='6,000.00'
+    app.radio[1].set_value('Future ES (equivalente)').run(timeout=20)
+    assert not app.exception and app.metric[0].value=='6,040.00' and not calls
+    current_day[0]='22'
+    next(b for b in app.button if b.label=='Aggiorna ora').click().run(timeout=20)
+    assert not app.exception and not app.error and len(calls)==1
+    assert app.metric[0].label=='Spot SPX' and app.metric[0].value=='6,000.00'
+    assert json.loads(downloads['Scarica verifica Edge JSON'])['display_conversion']['offset'] is None
+    assert any('restano in SPX' in message.value for message in app.info)
+
+
+def test_automatic_es_basis_rounded_once_per_date_and_manual_override_retained(monkeypatch):
+    monkeypatch.setattr(A,'login_reader',lambda *a,**k:session(expiry=10**10))
+    monkeypatch.setattr(A,'renew_reader',lambda *a,**k:a[2])
+    monkeypatch.setattr(A,'latest_snapshot',lambda *a,**k:A.SnapshotRef('2026-W43/snapshots/SPX_CBOE_20261021_160000.json.gz','1'))
+    monkeypatch.setattr(A,'download_snapshot',lambda *a,**k:(ROOT/'fixtures/synthetic_cboe_spx.json').read_bytes())
+    calls=[]
+    def estimate(target):
+        calls.append(target)
+        return {'basis':39.5,'reference_date':'2026-10-20','bar_count':26,'source':F.SOURCE,
+                'target_date':target.isoformat(),'minimum':39.,'maximum':40.,'last':40.}
+    monkeypatch.setattr(F,'download_basis',estimate)
+    app=configured_app();app.session_state['edge_price_view']='Future ES (equivalente)'
+    app.run(timeout=20)
+    app.text_input[0].set_value('edge@example.test');app.text_input[1].set_value('PRIVATE_PASSWORD')
+    app.button[0].click().run(timeout=20)
+    assert not app.exception and app.metric[0].value=='6,040.00' and len(calls)==1
+    app.text_input[0].set_value('-10,5').run(timeout=20)
+    assert not app.exception and app.metric[0].value=='5,989.50' and len(calls)==1
+    app.selectbox[0].set_value('0DTE').run(timeout=20)
+    assert not app.exception and app.metric[0].value=='5,989.50' and len(calls)==1
+    next(b for b in app.button if b.label=='Ricalcola ES − SPX').click().run(timeout=20)
+    assert not app.exception and app.metric[0].value=='6,040.00' and len(calls)==2
+    next(b for b in app.button if b.label=='Esci da Edge').click().run(timeout=20)
+    assert not app.exception and 'edge_basis_days' not in app.session_state

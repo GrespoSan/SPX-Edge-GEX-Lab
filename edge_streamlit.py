@@ -4,6 +4,7 @@ from __future__ import annotations
 import os
 import hashlib
 import json
+from datetime import datetime
 from pathlib import Path
 import time
 
@@ -15,6 +16,7 @@ from edge_clone_engine import MODES, analyze
 from edge_storage import StorageReadError
 from edge_archive import login_reader, renew_reader, latest_snapshot, download_snapshot
 from edge_verification import verify_snapshot
+from edge_futures import BasisUnavailable, download_basis, parse_basis, rounded_basis
 
 ROOT = Path(__file__).resolve().parent
 UPLOAD = "Carica fotografia CBOE"
@@ -42,6 +44,9 @@ def clear_private_session():
     for key in ('edge_reader_session', 'edge_archive_raw', 'edge_archive_ref',
                 'edge_archive_fetched', 'edge_archive_analysis', 'edge_raw'):
         st.session_state.pop(key, None)
+    for key in list(st.session_state):
+        if key.startswith('edge_basis_'):
+            st.session_state.pop(key, None)
 
 
 def private_session(config):
@@ -93,14 +98,85 @@ def source_data(mode):
     return (ROOT / "fixtures/synthetic_cboe_spx.json").read_bytes(), True
 
 
-def render_result(result, synthetic=False):
+def price_conversion(result, synthetic, target):
+    """Translate price coordinates only; never feed ES back into the gamma engine."""
+    if result['symbol'] != 'SPX':
+        return {'unit': result['symbol'], 'offset': None}
+    view = st.radio('Livelli visualizzati', ('Future ES (equivalente)', 'Indice SPX'),
+                    index=1 if synthetic else 0, horizontal=True, key='edge_price_view')
+    if view == 'Indice SPX':
+        return {'unit': 'SPX', 'offset': None}
+    day = target.isoformat()
+    days = st.session_state.setdefault('edge_basis_days', {})
+    record = days.setdefault(('synthetic:' if synthetic else '') + day,
+                             {'value': '', 'attempted': False, 'estimate': None, 'error': ''})
+    # A verified differential may be supplied in a link, scoped to ONE date.
+    if not synthetic and not record['attempted'] and not record['value']:
+        if st.query_params.get('es_basis_date') == day:
+            proposed = st.query_params.get('es_basis', '')
+            try:
+                parse_basis(proposed)
+                record['value'] = proposed
+            except BasisUnavailable:
+                pass
+    widget_key = 'edge_basis_input_' + ('synthetic_' if synthetic else '') + day
+    left, right = st.columns([2, 1])
+    refresh = right.button('Ricalcola ES − SPX', key='edge_basis_refresh_' + day, disabled=synthetic)
+    if not record['attempted'] or refresh:
+        record['attempted'] = True
+        if not synthetic and (refresh or not record['value'].strip()):
+            try:
+                with st.spinner('Calcolo ES − SPX della seduta cash precedente...'):
+                    estimate = download_basis(target)
+                record.update(estimate=estimate, value=str(rounded_basis(estimate['basis'])), error='')
+                st.session_state[widget_key] = record['value']
+            except BasisUnavailable as error:
+                record['error'] = str(error)
+    if widget_key not in st.session_state:
+        st.session_state[widget_key] = record['value']
+    record['value'] = left.text_input('Differenziale ES − SPX (punti)', key=widget_key,
+                                      placeholder='Vuoto: livelli SPX',
+                                      help='Media ES − SPX della seduta cash precedente, arrotondata al punto intero. Puoi inserire lo stesso valore verificato in APP SPX.')
+    estimate = record['estimate']
+    if estimate is not None:
+        st.caption(f"Media {estimate['basis']:.2f} → {rounded_basis(estimate['basis']):+d} punti · seduta {estimate['reference_date']} · {estimate['bar_count']} barre a 15 minuti. {estimate['source']}.")
+    if record['error']:
+        st.caption(record['error'])
+    try:
+        offset = parse_basis(record['value'])
+        if result['spot'] + offset <= 0:
+            raise BasisUnavailable('Il differenziale produrrebbe un prezzo ES non valido.')
+    except BasisUnavailable as error:
+        if record['value'].strip():
+            st.warning(str(error))
+        st.info('Conversione ES non disponibile: i valori seguenti restano in SPX. Inserisci il differenziale verificato in APP SPX.')
+        return {'unit': 'SPX', 'offset': None, 'target_date': day}
+    automatic = estimate is not None and offset == rounded_basis(estimate['basis'])
+    st.caption(f"Livelli ES equivalenti = SPX {offset:+g} punti · data {day} · spot SPX originale {result['spot']:,.2f}. Il valore equivalente non è una quotazione ES in tempo reale.")
+    st.caption('Il differenziale è riferito al future continuo ES=F; può differire dal contratto specifico del tuo grafico. GEX e regime restano quelli delle opzioni SPX.')
+    return {'unit': 'ES_equivalent', 'offset': offset, 'target_date': day,
+            'source': estimate['source'] if automatic else 'Differenziale verificato inserito dall’utente',
+            'reference_date': estimate['reference_date'] if automatic else None,
+            'automatic_estimate': estimate}
+
+
+def render_result(result, synthetic=False, basis_target=None):
     if synthetic:
         st.caption("Risultati su esempio sintetico; nessuna verifica su dati reali.")
     st.caption(f"{result['symbol']} | Fotografia UTC: {result['timestamp']} | Valutazione Edge: {result['valuation']}")
+    target = basis_target or datetime.fromisoformat(result['timestamp']).date()
+    conversion = price_conversion(result, synthetic, target)
+    offset = conversion['offset']
+    shift = offset if offset is not None else 0
+    translated = offset is not None
+    suffix = ' ES' if translated else ' ' + result['symbol']
+    def price(value):
+        return None if value is None else value + shift
     columns = st.columns(5)
     for column, label, value in zip(columns,
-            ("Spot", "Call Wall", "Put Wall", "Gamma Flip vicino", "Regime"),
-            (result["spot"], result["call_wall"], result["put_wall"], result["flip"], result["regime"])):
+            ("Spot equivalente ES" if translated else 'Spot' + suffix,
+             'Call Wall' + suffix, 'Put Wall' + suffix, 'Gamma Flip' + suffix, 'Regime ' + result['symbol']),
+            (price(result["spot"]), price(result["call_wall"]), price(result["put_wall"]), price(result["flip"]), result["regime"])):
         column.metric(label, f"{value:,.2f}" if isinstance(value, (int, float)) else value or "N/D")
     st.write("Scadenze effettive:", ", ".join(result["expiries"]))
     quality = "non stimabile" if result["quality_pct"] is None else f"{result['quality_pct']:.2f}%"
@@ -111,25 +187,33 @@ def render_result(result, synthetic=False):
     frame = result["rows"]
     if not frame.empty:
         chart = go.Figure()
-        chart.add_bar(x=frame["strike"], y=frame["call_gex"] / 1e9, name="Call GEX")
-        chart.add_bar(x=frame["strike"], y=frame["put_gex"] / 1e9, name="Put GEX")
-        chart.add_scatter(x=frame["strike"], y=frame["net_gex"] / 1e9, name="NET GEX", mode="lines")
-        chart.add_vline(x=result["spot"], line_dash="dot", annotation_text="Spot")
-        chart.update_layout(xaxis_title="Strike", yaxis_title="Miliardi USD per movimento dell'1%", barmode="relative")
+        chart.add_bar(x=frame["strike"] + shift, y=frame["call_gex"] / 1e9, name="Call GEX")
+        chart.add_bar(x=frame["strike"] + shift, y=frame["put_gex"] / 1e9, name="Put GEX")
+        chart.add_scatter(x=frame["strike"] + shift, y=frame["net_gex"] / 1e9, name="NET GEX", mode="lines")
+        chart.add_vline(x=price(result["spot"]), line_dash="dot", annotation_text="ES equivalente" if translated else "Spot SPX")
+        chart.update_layout(xaxis_title="Strike ES equivalente" if translated else "Strike " + result['symbol'], yaxis_title=f"GEX {result['symbol']} · miliardi USD per movimento dell'1%", barmode="relative")
         st.plotly_chart(chart, width="stretch")
-        st.download_button("Scarica profilo Edge CSV", frame.to_csv(index=False).encode(),
-                           file_name=f"EDGE_{result['symbol']}_{'SYNTHETIC_' if synthetic else ''}{result['sha256'][:12]}.csv",
+        exported = frame.copy()
+        if translated:
+            exported = exported.rename(columns={'strike': 'strike_spx'})
+            exported.insert(1, 'strike_es', frame['strike'] + shift)
+            exported['basis_es_spx'] = offset
+            exported['basis_target_date'] = conversion['target_date']
+            exported['basis_reference_date'] = conversion['reference_date']
+            exported['basis_source'] = conversion['source']
+        st.download_button("Scarica profilo Edge CSV", exported.to_csv(index=False).encode(),
+                           file_name=f"EDGE_{'ES_equivalente_' if translated else ''}{result['symbol']}_{'SYNTHETIC_' if synthetic else ''}{result['sha256'][:12]}.csv",
                            mime="text/csv")
     else:
         st.info("Nessuno strike nella fascia del grafico; i totali includono comunque la catena selezionata.")
     st.caption("Grafico e wall: strike entro ±10% dallo spot. Totali e curva ipotetica: contratti selezionati acquisiti entro ±20%.")
     with st.expander("Curva ipotetica e tutti i gamma flip"):
         curve = result["curve"]
-        chart = go.Figure(go.Scatter(x=curve["spot"], y=curve["net_gex"] / 1e9, mode="lines", name="NET GEX ipotetico"))
+        chart = go.Figure(go.Scatter(x=curve["spot"] + shift, y=curve["net_gex"] / 1e9, mode="lines", name="NET GEX ipotetico"))
         chart.add_hline(y=0, line_dash="dot")
-        chart.update_layout(xaxis_title="Spot ipotetico", yaxis_title="Miliardi USD/1%")
+        chart.update_layout(xaxis_title="Prezzo ES equivalente" if translated else "Spot ipotetico " + result['symbol'], yaxis_title=f"GEX {result['symbol']} · miliardi USD/1%")
         st.plotly_chart(chart, width="stretch")
-        st.write("Attraversamenti dello zero:", result["flips"] or "Nessun attraversamento nella finestra Edge")
+        st.write("Attraversamenti dello zero" + suffix + ":", [price(value) for value in result['flips']] or "Nessun attraversamento nella finestra Edge")
     with st.expander("Metodo Edge e provenienza"):
         st.write("Gamma Black–Scholes con r = q = 0; GEX = segno × gamma × OI × 100 × spot² × 0,01. Call positive e put negative sono assunzioni sulle posizioni, non dati osservati dei dealer.")
         st.write("Tempo residuo dal timestamp storico o dall'ultima chiusura secondo il motore Edge; mai dalla data odierna. Radice SPX/NDX: AM 09:30 New York; SPXW/NDXP: PM alla chiusura di sessione.")
@@ -137,6 +221,7 @@ def render_result(result, synthetic=False):
         st.write("Data OI inferita dalla sessione precedente, non pubblicata da CBOE:", result["oi_date"])
         st.code("SHA-256 file: " + result["sha256"] + "\nModello Edge: " + result["model_version"])
         st.caption("Nessuna scrittura Supabase, nessun invio MT4, nessuna integrazione con Serafini. Nessun processo di acquisizione live avviato dall'app.")
+    return conversion
 
 
 @st.fragment(run_every='120s')
@@ -173,8 +258,10 @@ def automatic_archive(mode):
             st.session_state['edge_archive_analysis'] = cached
         _, result, report = cached
         st.success(f"Verifica aritmetica superata: {report['contracts_cross_checked']} contratti, NET e Gross GEX riconciliati.")
-        render_result(result)
-        st.download_button('Scarica verifica Edge JSON', json.dumps(report, indent=2, allow_nan=False),
+        target = datetime.strptime(reference.path.rsplit('/', 1)[-1][9:17], '%Y%m%d').date()
+        conversion = render_result(result, basis_target=target)
+        exported_report = {**report, 'display_conversion': conversion}
+        st.download_button('Scarica verifica Edge JSON', json.dumps(exported_report, indent=2, allow_nan=False),
                            file_name=f"EDGE_verifica_{result['sha256'][:12]}.json",
                            mime='application/json', on_click='ignore')
         st.caption('Confronto con formula scalare separata; selezione dei contratti e tempi residui sono condivisi. Non certifica origine dei dati o posizioni dealer.')

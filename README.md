@@ -41,13 +41,27 @@ settimana di archivio piu' recente disponibile e controlla gli aggiornamenti
 ogni due minuti mentre la pagina e' aperta. La sessione viene rinnovata senza
 copiare JWT o URL firmati. Il motore non avvia cron o acquisizioni CBOE live.
 
-La configurazione reale e' ancora da attivare. Seguire
-[la procedura iniziale](docs/AUTOMATIC_ACCESS.md) e
-[il modello dei Secrets](.streamlit/secrets.toml.example).
+Il proprietario ha completato la configurazione reale e verificato la lettura.
+Per nuove installazioni seguire [la procedura iniziale](docs/AUTOMATIC_ACCESS.md)
+e [il modello dei Secrets](.streamlit/secrets.toml.example).
 Sono vietate credenziali privilegiate; password e token non vanno nel repository
 ne' in chat. I vecchi Secrets con token condiviso o URL firmato non vengono usati
 dall'interfaccia pubblica.
 
+
+## Livelli Future ES
+
+Per fotografie SPX reali la vista iniziale e' Future ES (equivalente). Applica
+lo stesso differenziale di APP SPX: media ES meno SPX sulle barre a 15 minuti
+della seduta cash precedente, arrotondata al punto intero. La conversione somma
+il differenziale a spot equivalente, wall, gamma flip e assi dei grafici; GEX e
+regime mantengono i valori delle opzioni SPX.
+
+E' possibile inserire lo stesso differenziale manuale verificato in APP SPX.
+Senza un differenziale disponibile i livelli restano esplicitamente SPX. Il
+valore non viene trasferito automaticamente a un'altra data e il prezzo ES
+equivalente non e' una quotazione corrente del future. Dettagli, fonte, export
+e limiti sono in [Livelli SPX ed equivalenti Future ES](docs/FUTURES.md).
 
 ## Metodo
 

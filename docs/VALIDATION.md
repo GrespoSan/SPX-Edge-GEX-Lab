@@ -30,8 +30,8 @@ Verifiche nell'ambiente di sviluppo, 23 ottobre 2026, Python 3.12.14:
 | Ambiente pulito con solo `requirements.txt` | Avvio e calcolo sintetico Streamlit verificati senza FastAPI o pytest |
 | `python -m pip check` | Nessuna incompatibilità rilevata |
 | Suite originale Edge | 212 test passati |
-| Suite completa, inclusi wrapper, Storage e Streamlit | 290 passati, 1 saltato |
-| Stessa suite con Python 3.14.9 e PyArrow 24.0.0 | 290 passati, 1 saltato |
+| Suite completa, inclusi wrapper, Storage e Streamlit | 319 passati, 1 saltato |
+| Stessa suite con Python 3.14.9 e PyArrow 24.0.0 | 319 passati, 1 saltato |
 | Test reale SPX | Saltato esplicitamente: fotografia assente |
 | Verifica scalare indipendente sul nuovo esempio sintetico | 40 contratti, NET e gross riconciliati |
 | Streamlit AppTest | Avvio senza Secrets, calcolo sintetico nelle tre modalità, sorgenti non configurate |
@@ -135,7 +135,7 @@ questa sessione non ha eseguito modifiche remote al progetto Supabase. I test ag
 rifiuto di un altro UID e ruoli privilegiati, rinnovo dei token, richieste di
 elenco paginate, selezione delle sole fotografie raw, download GET, protezione
 dei dati per visitatori anonimi, riuso nella sessione e pulizia al logout.
-La suite completa passa su Python 3.12 e 3.14.9: 290 passati, 1 test reale saltato.
+La suite completa passa su Python 3.12 e 3.14.9: 319 passati, 1 test reale saltato.
 Le modalita' pubbliche restano caricamento locale e demo; l'automatismo richiede
 login e resta disattivato senza configurazione e policy dedicate.
 Non sono stati caricati nel repository il rapporto privato ricevuto o chiavi.
@@ -153,3 +153,26 @@ Il successivo aggiornamento aggiunge un test di rifiuto dei risultati in caso di
 mancata riconciliazione e verifica riuso del rapporto, cambio di modalita' e
 pulizia al logout. I controlli usano la fotografia sintetica: non convertono il
 test reale locale saltato in un controllo eseguito.
+
+
+## Visualizzazione Future ES
+
+Aggiunta la sola conversione delle coordinate di prezzo, secondo la procedura
+APP SPX verificata in sola lettura. Il confronto locale con la funzione di
+riferimento sul commit indicato in [FUTURES.md](FUTURES.md) restituisce gli
+stessi differenziale medio, numero barre, minimo, massimo e ultimo valore in
+tre casi sintetici con differenziali positivi e negativi. Nessun codice Serafini
+viene importato dal runtime Edge.
+
+I 27 test del lettore pubblico/calcolo differenziale e i due nuovi test di
+integrazione Streamlit verificano origine Yahoo simulata, errori/dati mancanti,
+nessuno zero implicito, arrotondamento, livelli e grafici ES, export con entrambe
+le coordinate, GEX SPX invariato, override legato a data, ricalcolo e logout.
+Suite completa: 319 passati, 1 test reale locale saltato su Python 3.12 e 3.14.
+Confermata nuovamente l'identita' dei 25 file Python del motore `gexlab` con lo ZIP.
+
+La lettura Yahoo reale e' bloccata dal proxy del runner (CONNECT HTTP 403),
+quindi non e' attestata da questi test. Il differenziale fornito dal proprietario
+consente la conversione della fotografia gia' verificata; l'automatismo per
+nuove date dipende dalla disponibilita' delle barre pubbliche nel deploy Cloud.
+Nessuna modifica Supabase o a repository, job, dati e collegamenti Serafini.
