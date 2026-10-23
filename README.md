@@ -18,6 +18,9 @@ Su Windows: `setup.bat`, poi `launch.bat`; oppure usare
 `.venv\Scripts\python.exe` al posto di `.venv/bin/python`.
 Il percorso ufficiale dell'app cloud è **`edge_streamlit.py`**.
 Node.js e il backend FastAPI non servono all'app Streamlit.
+È stata verificata anche la compatibilità con Python 3.14.9, presente nel
+deploy Community Cloud. PyArrow è fissato a 24.0.0 per evitare la versione 26
+che Cloud segnala come affetta da un crash noto.
 Le versioni dirette e transitive sono fissate in `requirements.txt` e
 `constraints.txt`; `requirements-edge.txt` resta un alias compatibile.
 
@@ -77,6 +80,16 @@ viene segnalata. L'analisi non attesta l'idoneità operativa di un segnale.
 .venv/bin/python -m pytest tests -q -p no:cacheprovider
 .venv/bin/python scripts/verify_snapshot.py fixtures/synthetic_cboe_spx.json
 ```
+
+Con il servizio Streamlit avviato, è disponibile anche un controllo attraverso
+la connessione WebSocket effettiva:
+
+```bash
+.venv/bin/python scripts/check_streamlit.py --base-url http://127.0.0.1:8501
+```
+
+Verifica pagina iniziale e calcolo sintetico sul protocollo del server;
+non verifica il rendering JavaScript del browser o una fotografia reale.
 
 Per una fotografia **reale autorizzata**, conservarla in `local-data/` (esclusa
 da Git), quindi:

@@ -9,14 +9,16 @@ Verifiche nell'ambiente di sviluppo, 23 ottobre 2026, Python 3.12.14:
 | `python -m pip check` | Nessuna incompatibilità rilevata |
 | Suite originale Edge | 212 test passati |
 | Suite completa, inclusi wrapper, Storage e Streamlit | 268 passati, 1 saltato |
+| Stessa suite con Python 3.14.9 e PyArrow 24.0.0 | 268 passati, 1 saltato |
 | Test reale SPX | Saltato esplicitamente: fotografia assente |
 | Verifica scalare indipendente sul nuovo esempio sintetico | 40 contratti, NET e gross riconciliati |
 | Streamlit AppTest | Avvio senza Secrets, calcolo sintetico nelle tre modalità, sorgenti non configurate |
 | Processo Streamlit locale | Home HTTP 200; health HTTP 200 con risposta `ok` |
+| Protocollo WebSocket reale su Python 3.14.9 | Pagina iniziale e cinque metriche sintetiche ricevute, bind predefinito dual-stack |
 | Frontend originale, Node.js 24.19.0 | `npm ci` e `npm run build` completati |
 | Codice originale `gexlab/` | 25 file Python identici allo ZIP |
 | Richieste Supabase reali | Non eseguite: accesso di sola lettura non disponibile |
-| Streamlit Community Cloud | Deploy non eseguito; nessun URL online verificato |
+| Streamlit Community Cloud | Deploy avviato dal proprietario, server partito secondo il log; caricamento infinito segnalato nel browser, URL non verificabile dal runner |
 
 I test Storage usano `httpx.MockTransport`, senza scritture remote o test di
 privilegi tramite tentativi di modifica. Controllano GET, bucket e host,
@@ -26,6 +28,24 @@ senza token. Non attestano policy o accessibilità del progetto Supabase reale.
 La suite emette avvisi di deprecazione di dipendenze: FastAPI/Starlette sul
 client di test e `exchange_calendars`/NumPy sulle unità dei timedelta. I test
 terminano con successo; gli avvisi non vengono soppressi.
+
+## Diagnosi del deploy Community Cloud
+
+Il log fornito dal proprietario mostra installazione completata, Python 3.14.9,
+sostituzione automatica di PyArrow 26 con 24 per `apache/arrow#50471`, e avvio
+Uvicorn sulla porta 8501. Non contiene un traceback che spieghi il caricamento
+infinito osservato nel browser. Il repository ora richiede direttamente PyArrow
+24.0.0, in modo da allineare le installazioni locali e Cloud senza la sostituzione.
+
+Riprodotti localmente Python 3.14.9, le dipendenze e il bind predefinito `::`:
+test e controllo WebSocket completo riescono. Il bind è dual-stack e accetta
+IPv4: non è stato identificato come causa del problema. Non sono stati disattivati
+controlli CORS, XSRF o TLS.
+
+La connessione a `spx-edge-gex-lab-djvbrdhckns6fv4exbgxos.streamlit.app` dal
+runner rimane bloccata dal proxy prima di raggiungere l'app. Il funzionamento
+online non è quindi confermato. Servono il nuovo esito dopo il riavvio Edge e,
+se il caricamento persiste, il messaggio della pagina o della console del browser.
 
 ## Risultato sintetico riproducibile
 
@@ -56,9 +76,9 @@ festività, DST, scadenze e riconciliazione del profilo.
    remota lasciata disattivata, senza aggiungere requisiti di credenziali.
 2. Il proprietario deve verificare i privilegi della credenziale esistente;
    non sono autorizzate modifiche al progetto Supabase.
-3. Il proprietario deve poter creare la nuova app nel proprio account Streamlit,
-   collegare il repository e impostare Secrets/visibilità; questa sessione non
-   dispone di un accesso Streamlit per completare tali azioni.
+3. Il proprietario ha creato l'app nel proprio account Streamlit. Questa sessione
+   non dispone di accesso alla gestione Streamlit per riavviarla o ispezionare
+   direttamente i log del deploy.
 4. Verificare poi l'URL effettivo con accesso, fotografia e calcolo.
 
 Il permesso di lavorare e caricare codice nel repository Edge è già stato dato.
