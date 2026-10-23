@@ -1,0 +1,18 @@
+# Local credentials and Streamlit secrets must never be committed.
+.env
+.env.*
+!.env.example
+.streamlit/secrets.toml
+
+# Local Python environments and generated files.
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Private snapshots and local diagnostic output.
+local-data/
+local-logs/
