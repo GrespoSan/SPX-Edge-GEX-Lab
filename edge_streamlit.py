@@ -211,7 +211,9 @@ def render_result(result, synthetic=False, basis_target=None, archive_context=No
     suffix = ' ES' if translated else ' ' + result['symbol']
     def price(value):
         return None if value is None else value + shift
-    st.markdown(f"**Fotografia CBOE · ora italiana: {italian_time(result['timestamp'])}**")
+    st.markdown(f"**Timestamp del dato CBOE (interpretato come UTC): {italian_time(result['timestamp'])}**")
+    if archive_context is not None:
+        st.caption("L'orario di acquisizione/download è distinto dal timestamp del dato: per la fotografia delle 07:30 verificarlo nel registro di acquisizione Serafini. Non viene dedotto dal nome file.")
     columns = st.columns(5)
     for column, label, value in zip(columns,
             ("Spot equivalente ES" if translated else 'Spot' + suffix,
