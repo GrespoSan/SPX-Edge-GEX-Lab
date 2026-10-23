@@ -175,7 +175,6 @@ def price_conversion(result, synthetic, target, archive_context=None):
                                       placeholder='Vuoto: livelli SPX',
                                       help='Letto dai metadati già pubblicati da APP SPX, arrotondato al punto intero. Eventuale correzione manuale valida solo per questa data.')
     estimate = record['estimate']
-    if estimate is not None:
     if record['error']:
         st.caption(record['error'])
     if archive_context is None and not synthetic:
