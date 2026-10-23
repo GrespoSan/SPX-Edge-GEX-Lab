@@ -125,7 +125,18 @@ def prepare_contracts(raw: bytes, mode: str):
     contracts = gex.finalize(chain.contracts, chain.spot.price, chain.valuation, cal)
     dates = sorted({contract.expiry for contract in contracts})
     if mode == "0DTE":
-        keep = {timestamp.astimezone(NY).date()}
+        # The overnight Globex session starts at 18:00 New York on the
+        # preceding calendar day. Its 0DTE expiry is the NEXT equity session.
+        # Example: 2026-10-23 03:40 UTC = Oct 22, 23:40 New York:
+        # use the 2026-10-23 expiry, not 2026-10-22.
+        ny_clock = timestamp.astimezone(NY)
+        trading_day = ny_clock.date()
+        if ny_clock.hour >= 18:
+            sessions_ahead = sorted(d for d in cal.sessions if d > trading_day)
+            if not sessions_ahead:
+                raise ValueError("Sessione americana successiva non disponibile.")
+            trading_day = sessions_ahead[0]
+        keep = {trading_day}
     elif mode == "Prossime 4 scadenze":
         keep = set(dates[:4])
     else:
