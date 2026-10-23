@@ -1,0 +1,430 @@
+{
+  "_edge_fixture": "SYNTHETIC TEST DATA, NOT A REAL CBOE SNAPSHOT",
+  "timestamp": "2026-10-14 13:59:03",
+  "symbol": "SPX",
+  "data": {
+    "current_price": 6000.0,
+    "options": [
+      {
+        "option": "SPXW261014C05900000",
+        "open_interest": 1000,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261014P05900000",
+        "open_interest": 700,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261014C05950000",
+        "open_interest": 1050,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261014P05950000",
+        "open_interest": 750,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261014C06000000",
+        "open_interest": 1100,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261014P06000000",
+        "open_interest": 800,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261014C06050000",
+        "open_interest": 1150,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261014P06050000",
+        "open_interest": 850,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261014C06100000",
+        "open_interest": 1200,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261014P06100000",
+        "open_interest": 900,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261015C05900000",
+        "open_interest": 1000,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261015P05900000",
+        "open_interest": 700,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261015C05950000",
+        "open_interest": 1050,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261015P05950000",
+        "open_interest": 750,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261015C06000000",
+        "open_interest": 1100,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261015P06000000",
+        "open_interest": 800,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261015C06050000",
+        "open_interest": 1150,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261015P06050000",
+        "open_interest": 850,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261015C06100000",
+        "open_interest": 1200,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261015P06100000",
+        "open_interest": 900,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261016C05900000",
+        "open_interest": 1000,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261016P05900000",
+        "open_interest": 700,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261016C05950000",
+        "open_interest": 1050,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261016P05950000",
+        "open_interest": 750,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261016C06000000",
+        "open_interest": 1100,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261016P06000000",
+        "open_interest": 800,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261016C06050000",
+        "open_interest": 1150,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261016P06050000",
+        "open_interest": 850,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261016C06100000",
+        "open_interest": 1200,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261016P06100000",
+        "open_interest": 900,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261019C05900000",
+        "open_interest": 1000,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261019P05900000",
+        "open_interest": 700,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261019C05950000",
+        "open_interest": 1050,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261019P05950000",
+        "open_interest": 750,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261019C06000000",
+        "open_interest": 1100,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261019P06000000",
+        "open_interest": 800,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261019C06050000",
+        "open_interest": 1150,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261019P06050000",
+        "open_interest": 850,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261019C06100000",
+        "open_interest": 1200,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261019P06100000",
+        "open_interest": 900,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261020C05900000",
+        "open_interest": 1000,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261020P05900000",
+        "open_interest": 700,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261020C05950000",
+        "open_interest": 1050,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261020P05950000",
+        "open_interest": 750,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261020C06000000",
+        "open_interest": 1100,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261020P06000000",
+        "open_interest": 800,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261020C06050000",
+        "open_interest": 1150,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261020P06050000",
+        "open_interest": 850,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261020C06100000",
+        "open_interest": 1200,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261020P06100000",
+        "open_interest": 900,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261021C05900000",
+        "open_interest": 1000,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261021P05900000",
+        "open_interest": 700,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261021C05950000",
+        "open_interest": 1050,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261021P05950000",
+        "open_interest": 750,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261021C06000000",
+        "open_interest": 1100,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261021P06000000",
+        "open_interest": 800,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261021C06050000",
+        "open_interest": 1150,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261021P06050000",
+        "open_interest": 850,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261021C06100000",
+        "open_interest": 1200,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      },
+      {
+        "option": "SPXW261021P06100000",
+        "open_interest": 900,
+        "iv": 0.2,
+        "bid": null,
+        "ask": null
+      }
+    ]
+  }
+}

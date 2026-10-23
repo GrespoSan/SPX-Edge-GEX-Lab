@@ -16,3 +16,12 @@ __pycache__/
 # Private snapshots and local diagnostic output.
 local-data/
 local-logs/
+
+# Upstream local caches, database and optional frontend build.
+*.db
+*.db-wal
+*.db-shm
+data/
+node_modules/
+web/dist/
+*.tsbuildinfo

@@ -1,0 +1,2 @@
+# Backward-compatible alias for the clone's documented installation command.
+-r requirements.txt

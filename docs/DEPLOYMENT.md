@@ -1,102 +1,95 @@
-# SPX Edge GEX Lab — preparazione della pubblicazione
+# Pubblicazione indipendente su Streamlit Community Cloud
 
-## Stato verificato
+## Configurazione della nuova app
 
-Il repository originale contiene soltanto `README.md` e `NOTES.txt`.
-Il codice Edge, il clone citato nella conversazione «Progetto parallelo Edge
-GEX Lab», le dipendenze e una fotografia CBOE non sono disponibili nel checkout.
-Questo documento prepara la pubblicazione: non attesta un'applicazione
-implementata, un calcolo validato o una pubblicazione eseguita.
+Usare **Create app** nell'account Streamlit del proprietario e collegare soltanto:
 
-## Separazione obbligatoria
+| Campo | Valore |
+| --- | --- |
+| Repository | `GrespoSan/SPX-Edge-GEX-Lab` |
+| Branch | `main` |
+| Main file path | `edge_streamlit.py` |
+| Python | `3.12` nelle impostazioni avanzate |
+| Dipendenze | `requirements.txt`, con `constraints.txt` |
+| Visibilità | Solo utenti autorizzati a vedere i dati privati |
 
-- Lavorare esclusivamente su `GrespoSan/SPX-Edge-GEX-Lab`.
-- Non modificare la procedura Serafini, i suoi repository, i calcoli, i cron-job,
-  il progetto Supabase esistente o il collegamento MT4.
-- Il motore matematico Edge deve essere indipendente. Recuperare le formule e
-  le convenzioni dalla conversazione originale prima di implementarle.
-- L'unica integrazione consentita è la lettura delle fotografie CBOE già
-  archiviate nel bucket privato `spx-snapshots`.
+Non modificare eventuali app Serafini. Non configurare cron-job, callback, MT4,
+feed CBOE live o connessioni ai suoi database. Non servono Node.js, Alpaca,
+FastAPI, una base dati o una service-role key per l'app Streamlit.
+L'app parte senza Secrets; il caricamento manuale e l'esempio sintetico restano
+disponibili anche senza Supabase.
 
-## Materiali necessari per completare lo sviluppo
+## Lettura del bucket privato
 
-1. Esportazione o link condiviso accessibile della conversazione di riferimento,
-   con il codice originale e gli allegati del clone.
-2. Una fotografia reale SPX CBOE autorizzata per la verifica e il suo contesto
-   temporale; non pubblicare dati privati nel repository.
-3. La modalità di lettura già autorizzata per il bucket, senza comunicare
-   credenziali in chat o inserirle in Git.
-4. Accesso del proprietario a Streamlit Community Cloud e al repository Edge.
+Il bucket `spx-snapshots` non deve essere reso pubblico. Non creare o modificare
+policy, ruoli, utenti, funzioni o oggetti nel progetto Supabase esistente.
+Usare soltanto un accesso compatibile già autorizzato dal proprietario.
+Il modulo `edge_storage.py` usa esclusivamente GET di un singolo oggetto,
+con TLS verificato, senza redirect, senza elenchi o generazione di URL firmati.
 
-## Accesso Supabase esclusivamente in lettura
+Scegliere **una** delle seguenti configurazioni nel pannello Secrets della
+**nuova app Streamlit**, senza inserire valori nel repository o in chat.
 
-Riutilizzare soltanto autorizzazioni esistenti. Non creare utenti, ruoli,
-policy, bucket, tabelle, funzioni o processi nel progetto Supabase esistente.
-Non rendere pubblico il bucket.
+### URL firmato già disponibile
 
-Modalità ammissibili, da verificare con il proprietario:
+Impostare `SUPABASE_SNAPSHOT_SIGNED_URL` con un URL già emesso, limitato a una
+fotografia specifica sotto `/storage/v1/object/sign/spx-snapshots/`.
+Il dominio deve appartenere a un progetto `*.supabase.co`.
+Se `SUPABASE_URL` è configurato, il dominio deve corrispondere a quel progetto.
+Selezionare «Fotografia con URL firmato» nell'app e premere «Leggi fotografia».
+L'app non riceve né usa la chiave amministrativa necessaria per emettere URL.
+La scadenza del link deve essere gestita fuori dall'app da un soggetto già
+abilitato; Edge non rinnova o crea firme. L'intero URL è un segreto.
 
-- Un URL firmato per una fotografia specifica, già fornito da un soggetto
-  autorizzato, con scadenza e ambito limitati. Trattare l'intero URL come un
-  segreto e verificare che sia utilizzabile dall'app distribuita. L'app Edge
-  non deve ricevere la chiave necessaria a generare gli URL.
-- Un'identità esistente con privilegi limitati alla lettura degli oggetti
-  necessari. Una chiave publishable/anon, da sola, non prova l'accesso al bucket
-  privato: verificare anche autenticazione e policy già presenti. Se i permessi
-  non sono sufficienti, fermare l'integrazione senza modificare Supabase.
+### Identità già limitata alla lettura
 
-Non usare chiavi `service_role`, chiavi segrete amministrative, credenziali del
-database o account che abbiano privilegi di scrittura. Impiegare solo richieste
-di lettura; non testare i privilegi tentando upload, cancellazioni o modifiche.
-Il successo di un download non dimostra da solo che una credenziale sia di sola
-lettura: occorre anche la conferma del suo ambito autorizzativo.
+Impostare:
 
-Tenere segreti e URL firmati nelle impostazioni Secrets di Streamlit Community
-Cloud. In locale, `.streamlit/secrets.toml` è escluso da Git. Non registrarli nei
-log, negli errori mostrati all'utente o nella cache pubblica. Non inserire
-fotografie private nel repository; `local-data/` è esclusa da Git. Limitare
-l'accesso all'app agli utenti autorizzati a vedere i dati prima di collegare il
-bucket privato.
+| Secret | Significato |
+| --- | --- |
+| `SUPABASE_URL` | URL HTTPS del progetto esistente |
+| `SUPABASE_ANON_KEY` | Chiave publishable/anon del progetto, mai una chiave privilegiata |
+| `SUPABASE_READ_TOKEN` | JWT di un'identità esistente, con privilegi limitati alla lettura degli oggetti necessari |
+| `SUPABASE_READ_ONLY_CONFIRMED` | `true` solo dopo la verifica dei privilegi esistenti da parte del proprietario |
 
-Se non esiste una modalità compatibile con questi vincoli, la lettura del
-bucket rimane bloccata. Un file fornito dal proprietario può consentire una
-verifica matematica locale, ma non dimostra l'integrazione con Supabase.
+Selezionare «Oggetto Supabase privato», indicare il percorso completo relativo al
+bucket e premere «Leggi fotografia». Non inserire il nome del bucket nel percorso.
+Una chiave publishable/anon da sola **non prova** l'accesso al bucket privato.
+La conferma non restringe i privilegi: registra una verifica già svolta.
+L'esito positivo di un GET non dimostra che l'identità sia di sola lettura.
+Non provare upload o cancellazioni per controllarlo.
 
-## Verifica del motore Edge dopo il recupero
+L'app rifiuta chiavi `sb_secret_*` e JWT con ruoli privilegiati noti prima di
+eseguire richieste. Questa esclusione locale non sostituisce il controllo RLS
+del proprietario; il server Supabase verifica l'autenticità del JWT.
+Non configurare service-role key, credenziali del database o account amministrativi.
+Se non esiste un accesso compatibile, fermare questa integrazione e usare
+il caricamento manuale; eventuali modifiche Supabase non rientrano nel mandato.
 
-Documentare e testare le convenzioni effettivamente previste dal modello
-originale: schema e unità CBOE, sottostante SPX, prezzo spot, timestamp e fuso,
-scadenze, tempo residuo, volatilità, tassi, dividendi, moltiplicatore del
-contratto, open interest e convenzione dei segni call/put. Non importare
-implicitamente convenzioni o risultati Serafini.
+## Segreti, dati e sessioni
 
-Eseguire i test del motore e una verifica riproducibile su una fotografia reale,
-registrando identificativo non sensibile, impronta SHA-256 del file, parametri,
-risultati e confronto con un riferimento Edge calcolato indipendentemente.
-Distinguere test sintetici, verifica su dati reali e lettura del bucket.
+Il modello `.streamlit/secrets.toml.example` contiene solo commenti e placeholder.
+In locale, `.streamlit/secrets.toml`, `.env` e `local-data/` sono esclusi da Git.
+La pubblicazione Codex non trasferisce automaticamente i Secrets a Streamlit.
+Le fotografie non sono conservate in cache condivise: solo nella sessione che
+le ha lette. Cambiare sorgente, percorso o credenziali elimina la lettura precedente.
+Errori HTTP e di connessione non mostrano URL firmati, token o risposte remote.
+Il download remoto è limitato a 25 MiB; il JSON decompresso a 100 MiB.
+La visibilità dell'app va verificata prima di abilitare dati privati.
 
-## Streamlit Community Cloud
+## Verifica prima e dopo il deploy
 
-Dopo il recupero e la verifica del codice:
+1. Installare `requirements-dev.txt`; eseguire `python -m pytest tests -q`.
+2. Verificare il caricamento e il calcolo locale su una fotografia reale
+   autorizzata. Usare `scripts/verify_snapshot.py`, annotando hash, timestamp,
+   scadenze e risultati; non commettere dati privati o report sensibili.
+3. Confermare che l'identità sia già di sola lettura, senza cambiare Supabase.
+4. Eseguire il deploy della nuova app e controllare eventuali errori nei log.
+5. Aprire l'URL **assegnato realmente da Streamlit** con l'identità prevista.
+6. Controllare accesso, caricamento di una fotografia e risultati del motore;
+   lo stato HTTP o un endpoint di salute, da soli, non dimostrano il funzionamento.
+7. Registrare commit distribuito, URL, data della prova ed esito del controllo.
 
-1. Identificare l'entrypoint Streamlit reale e fissare dipendenze e versione
-   Python compatibili; non inventare un percorso applicativo prima del recupero.
-2. Installare le dipendenze in un ambiente isolato, eseguire i test e avviare
-   l'app in locale. Verificare anche il caricamento della fotografia e il
-   risultato del motore: un endpoint di salute non basta.
-3. Caricare nel solo repository Edge il codice verificato, senza segreti e senza
-   dati privati. Controllare il diff prima del push; non usare force push.
-4. Nell'account Streamlit del proprietario creare una nuova applicazione dal
-   repository `GrespoSan/SPX-Edge-GEX-Lab`, branch `main`, selezionando
-   l'entrypoint verificato. Non modificare eventuali app Serafini.
-5. Impostare la versione Python verificata, la visibilità appropriata e i soli
-   segreti di lettura necessari. Le impostazioni segrete locali di Codex non
-   vengono trasferite automaticamente a Streamlit.
-6. Avviare il deploy e controllare i log evitando di esporre credenziali.
-7. Verificare l'URL assegnato realmente dalla piattaforma: apertura dell'app,
-   accesso autorizzato, caricamento della fotografia e calcolo Edge. Se l'app
-   richiede autenticazione, completare anche la verifica autenticata.
-
-Non dichiarare l'app pubblicata finché l'URL online non è stato verificato.
-Registrare separatamente commit distribuito, URL, esito dei test, verifica
-dell'accesso in sola lettura e limiti ancora presenti.
+Non dichiarare l'app pubblicata finché il suo URL non è stato verificato.
+Un deploy Codex dell'ambiente di sviluppo è distinto dal deploy Streamlit.
+Non esiste al momento un URL Streamlit verificato in questa sessione.

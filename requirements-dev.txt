@@ -1,0 +1,5 @@
+-r requirements.txt
+# Optional upstream API and its original regression suite.
+fastapi==0.161.1
+uvicorn==0.54.0
+pytest==9.1.1

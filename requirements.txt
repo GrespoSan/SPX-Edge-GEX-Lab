@@ -1,0 +1,11 @@
+# Runtime for the independent Streamlit archive application (Python 3.12).
+-c constraints.txt
+streamlit==1.66.1
+pandas==2.3.3
+plotly==6.9.0
+httpx==0.28.1
+numpy==2.5.4
+scipy==1.18.1
+tzdata==2026.5
+python-dotenv==1.2.4
+exchange-calendars==4.13.2
