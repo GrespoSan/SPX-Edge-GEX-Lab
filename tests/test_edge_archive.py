@@ -10,6 +10,7 @@ from streamlit.testing.v1 import AppTest
 import edge_archive as A
 import edge_verification as V
 import edge_futures as F
+import edge_shared_basis as S
 from edge_storage import StorageReadError
 
 URL = 'https://exampleproject.supabase.co'
@@ -157,6 +158,7 @@ def configured_app():
 
 def test_public_page_cannot_read_private_archive_without_login(monkeypatch):
     monkeypatch.setattr(A,'latest_snapshot',lambda *a,**k:pytest.fail('Anonymous storage request'))
+    monkeypatch.setattr(S,'read_shared_basis',lambda *a,**k:pytest.fail('Anonymous shared feed request'))
     app=configured_app().run(timeout=20)
     assert not app.exception and not app.error and len(app.metric)==0
     assert [box.label for box in app.text_input]==['Email Edge','Password Edge']
@@ -258,10 +260,14 @@ def test_es_translation_preserves_spx_math_and_exports_and_scopes_override_to_da
     monkeypatch.setattr(A,'latest_snapshot',lambda *a,**k:A.SnapshotRef(f'2026-W43/snapshots/SPX_CBOE_202610{current_day[0]}_160000.json.gz','1'))
     monkeypatch.setattr(A,'download_snapshot',lambda *a,**k:raw)
     calls=[]
-    def unavailable(target):
+    def shared(project,key,reader,target):
         calls.append(target)
-        raise F.BasisUnavailable('Fonte non disponibile.')
-    monkeypatch.setattr(F,'download_basis',unavailable)
+        if target.day!=21:
+            raise F.BasisUnavailable('Differenziale di un altro giorno.')
+        return {'basis':40.,'reference_date':'2026-10-20','source':'Archivio APP SPX · mt4/latest.csv',
+                'published_utc':'2026-10-21T16:00:00+00:00','target_date':target.isoformat(),
+                'shared_object':'mt4/latest.csv','provider_source':'Yahoo Finance'}
+    monkeypatch.setattr(S,'read_shared_basis',shared)
     app=configured_app()
     app.session_state['edge_price_view']='Future ES (equivalente)'
     app.query_params['es_basis_date']='2026-10-21'
@@ -269,7 +275,7 @@ def test_es_translation_preserves_spx_math_and_exports_and_scopes_override_to_da
     app.run(timeout=20)
     app.text_input[0].set_value('edge@example.test');app.text_input[1].set_value('PRIVATE_PASSWORD')
     app.button[0].click().run(timeout=20)
-    assert not app.exception and not app.error and not calls
+    assert not app.exception and not app.error and len(calls)==1
     assert [m.value for m in app.metric[:3]]==['6,040.00','6,040.00','6,040.00']
     assert app.metric[0].label=='Spot equivalente ES'
     report=json.loads(downloads['Scarica verifica Edge JSON'])
@@ -289,10 +295,10 @@ def test_es_translation_preserves_spx_math_and_exports_and_scopes_override_to_da
     app.radio[1].set_value('Indice SPX').run(timeout=20)
     assert not app.exception and app.metric[0].value=='6,000.00'
     app.radio[1].set_value('Future ES (equivalente)').run(timeout=20)
-    assert not app.exception and app.metric[0].value=='6,040.00' and not calls
+    assert not app.exception and app.metric[0].value=='6,040.00' and len(calls)==1
     current_day[0]='22'
     next(b for b in app.button if b.label=='Aggiorna ora').click().run(timeout=20)
-    assert not app.exception and not app.error and len(calls)==1
+    assert not app.exception and not app.error and len(calls)==2
     assert app.metric[0].label=='Spot SPX' and app.metric[0].value=='6,000.00'
     assert json.loads(downloads['Scarica verifica Edge JSON'])['display_conversion']['offset'] is None
     assert any('restano in SPX' in message.value for message in app.info)
@@ -304,21 +310,34 @@ def test_automatic_es_basis_rounded_once_per_date_and_manual_override_retained(m
     monkeypatch.setattr(A,'latest_snapshot',lambda *a,**k:A.SnapshotRef('2026-W43/snapshots/SPX_CBOE_20261021_160000.json.gz','1'))
     monkeypatch.setattr(A,'download_snapshot',lambda *a,**k:(ROOT/'fixtures/synthetic_cboe_spx.json').read_bytes())
     calls=[]
-    def estimate(target):
+    raw_basis=[39.5]
+    def estimate(project,key,reader,target):
         calls.append(target)
-        return {'basis':39.5,'reference_date':'2026-10-20','bar_count':26,'source':F.SOURCE,
-                'target_date':target.isoformat(),'minimum':39.,'maximum':40.,'last':40.}
-    monkeypatch.setattr(F,'download_basis',estimate)
+        return {'basis':raw_basis[0],'reference_date':'2026-10-20','source':'Archivio APP SPX · mt4/latest.csv',
+                'published_utc':'2026-10-21T16:00:00+00:00','target_date':target.isoformat(),
+                'shared_object':'mt4/latest.csv','provider_source':'Yahoo Finance'}
+    monkeypatch.setattr(S,'read_shared_basis',estimate)
+    monkeypatch.setattr(F,'download_basis',lambda *a,**k:pytest.fail('Edge must not recalculate the shared basis'))
     app=configured_app();app.session_state['edge_price_view']='Future ES (equivalente)'
     app.run(timeout=20)
     app.text_input[0].set_value('edge@example.test');app.text_input[1].set_value('PRIVATE_PASSWORD')
     app.button[0].click().run(timeout=20)
     assert not app.exception and app.metric[0].value=='6,040.00' and len(calls)==1
+    record=app.session_state['edge_basis_days']['2026-10-21']
+    record['read_at']=-1e12
+    raw_basis[0]=40.5
+    app.run(timeout=20)
+    assert not app.exception and app.metric[0].value=='6,041.00' and len(calls)==2
     app.text_input[0].set_value('-10,5').run(timeout=20)
-    assert not app.exception and app.metric[0].value=='5,989.50' and len(calls)==1
+    assert not app.exception and app.metric[0].value=='5,989.50' and len(calls)==2
     app.selectbox[0].set_value('0DTE').run(timeout=20)
-    assert not app.exception and app.metric[0].value=='5,989.50' and len(calls)==1
-    next(b for b in app.button if b.label=='Ricalcola ES − SPX').click().run(timeout=20)
-    assert not app.exception and app.metric[0].value=='6,040.00' and len(calls)==2
+    assert not app.exception and app.metric[0].value=='5,989.50' and len(calls)==2
+    next(b for b in app.button if b.label=='Rileggi ES − SPX').click().run(timeout=20)
+    assert not app.exception and app.metric[0].value=='6,041.00' and len(calls)==3
+    app.session_state['edge_basis_days']['2026-10-21']={
+        'value':'100','attempted':True,'estimate':{'basis':100,'source':'old Yahoo result'},'error':''}
+    app.session_state['edge_basis_input_2026-10-21']='100'
+    app.run(timeout=20)
+    assert not app.exception and app.metric[0].value=='6,041.00' and len(calls)==4
     next(b for b in app.button if b.label=='Esci da Edge').click().run(timeout=20)
     assert not app.exception and 'edge_basis_days' not in app.session_state

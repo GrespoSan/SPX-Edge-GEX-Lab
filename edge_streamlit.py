@@ -1,4 +1,4 @@
-"""Independent, archive-only Streamlit application. No Serafini integration."""
+"""Independent gamma engine with read-only shared market metadata."""
 from __future__ import annotations
 
 import os
@@ -16,7 +16,8 @@ from edge_clone_engine import MODES, analyze
 from edge_storage import StorageReadError
 from edge_archive import login_reader, renew_reader, latest_snapshot, download_snapshot
 from edge_verification import verify_snapshot
-from edge_futures import BasisUnavailable, download_basis, parse_basis, rounded_basis
+from edge_futures import BasisUnavailable, parse_basis, rounded_basis
+from edge_shared_basis import read_shared_basis
 
 ROOT = Path(__file__).resolve().parent
 UPLOAD = "Carica fotografia CBOE"
@@ -98,7 +99,7 @@ def source_data(mode):
     return (ROOT / "fixtures/synthetic_cboe_spx.json").read_bytes(), True
 
 
-def price_conversion(result, synthetic, target):
+def price_conversion(result, synthetic, target, archive_context=None):
     """Translate price coordinates only; never feed ES back into the gamma engine."""
     if result['symbol'] != 'SPX':
         return {'unit': result['symbol'], 'offset': None}
@@ -109,39 +110,58 @@ def price_conversion(result, synthetic, target):
     day = target.isoformat()
     days = st.session_state.setdefault('edge_basis_days', {})
     record = days.setdefault(('synthetic:' if synthetic else '') + day,
-                             {'value': '', 'attempted': False, 'estimate': None, 'error': ''})
+                             {'value': '', 'estimate': None, 'error': '', 'read_at': None, 'manual': False})
+    migrated = 'read_at' not in record
+    if migrated:
+        # Discard an estimate retained by the previous Yahoo-based release.
+        record.update(value='', estimate=None, error='', read_at=None, manual=False)
     # A verified differential may be supplied in a link, scoped to ONE date.
-    if not synthetic and not record['attempted'] and not record['value']:
+    if archive_context is None and not synthetic and record['read_at'] is None and not record['value']:
         if st.query_params.get('es_basis_date') == day:
             proposed = st.query_params.get('es_basis', '')
             try:
                 parse_basis(proposed)
                 record['value'] = proposed
+                record['manual'] = True
             except BasisUnavailable:
                 pass
     widget_key = 'edge_basis_input_' + ('synthetic_' if synthetic else '') + day
+    if migrated:
+        st.session_state.pop(widget_key, None)
+    if widget_key in st.session_state and st.session_state[widget_key] != record['value']:
+        record['value'] = st.session_state[widget_key]
+        record['manual'] = bool(record['value'].strip())
     left, right = st.columns([2, 1])
-    refresh = right.button('Ricalcola ES − SPX', key='edge_basis_refresh_' + day, disabled=synthetic)
-    if not record['attempted'] or refresh:
-        record['attempted'] = True
-        if not synthetic and (refresh or not record['value'].strip()):
-            try:
-                with st.spinner('Calcolo ES − SPX della seduta cash precedente...'):
-                    estimate = download_basis(target)
-                record.update(estimate=estimate, value=str(rounded_basis(estimate['basis'])), error='')
-                st.session_state[widget_key] = record['value']
-            except BasisUnavailable as error:
-                record['error'] = str(error)
+    refresh = right.button('Rileggi ES − SPX', key='edge_basis_refresh_' + day,
+                           disabled=synthetic or archive_context is None)
+    current = time.monotonic()
+    if (archive_context is not None and not synthetic and
+            (refresh or record['read_at'] is None or current - record['read_at'] >= 110)):
+        try:
+            with st.spinner('Lettura differenziale già pubblicato da APP SPX...'):
+                estimate = read_shared_basis(*archive_context, target)
+            record.update(estimate=estimate, error='')
+            if refresh:
+                record['manual'] = False
+        except BasisUnavailable as error:
+            record.update(estimate=None, error=str(error))
+        record['read_at'] = current
+    if not record['manual']:
+        estimate = record['estimate']
+        record['value'] = str(rounded_basis(estimate['basis'])) if estimate is not None else ''
+        st.session_state[widget_key] = record['value']
     if widget_key not in st.session_state:
         st.session_state[widget_key] = record['value']
     record['value'] = left.text_input('Differenziale ES − SPX (punti)', key=widget_key,
                                       placeholder='Vuoto: livelli SPX',
-                                      help='Media ES − SPX della seduta cash precedente, arrotondata al punto intero. Puoi inserire lo stesso valore verificato in APP SPX.')
+                                      help='Letto dai metadati già pubblicati da APP SPX, arrotondato al punto intero. Eventuale correzione manuale valida solo per questa data.')
     estimate = record['estimate']
     if estimate is not None:
-        st.caption(f"Media {estimate['basis']:.2f} → {rounded_basis(estimate['basis']):+d} punti · seduta {estimate['reference_date']} · {estimate['bar_count']} barre a 15 minuti. {estimate['source']}.")
+        st.caption(f"Differenziale pubblicato {estimate['basis']:.6f} → {rounded_basis(estimate['basis']):+d} punti · seduta {estimate['reference_date']} · pubblicato {estimate['published_utc']}. {estimate['source']}.")
     if record['error']:
         st.caption(record['error'])
+    if archive_context is None and not synthetic:
+        st.caption('La lettura automatica del differenziale privato richiede accesso ad Archivio SPX automatico.')
     try:
         offset = parse_basis(record['value'])
         if result['spot'] + offset <= 0:
@@ -149,9 +169,9 @@ def price_conversion(result, synthetic, target):
     except BasisUnavailable as error:
         if record['value'].strip():
             st.warning(str(error))
-        st.info('Conversione ES non disponibile: i valori seguenti restano in SPX. Inserisci il differenziale verificato in APP SPX.')
+        st.info('Conversione ES non disponibile: i valori seguenti restano in SPX. Serve un differenziale condiviso valido per questa data.')
         return {'unit': 'SPX', 'offset': None, 'target_date': day}
-    automatic = estimate is not None and offset == rounded_basis(estimate['basis'])
+    automatic = not record['manual'] and estimate is not None
     st.caption(f"Livelli ES equivalenti = SPX {offset:+g} punti · data {day} · spot SPX originale {result['spot']:,.2f}. Il valore equivalente non è una quotazione ES in tempo reale.")
     st.caption('Il differenziale è riferito al future continuo ES=F; può differire dal contratto specifico del tuo grafico. GEX e regime restano quelli delle opzioni SPX.')
     return {'unit': 'ES_equivalent', 'offset': offset, 'target_date': day,
@@ -160,12 +180,12 @@ def price_conversion(result, synthetic, target):
             'automatic_estimate': estimate}
 
 
-def render_result(result, synthetic=False, basis_target=None):
+def render_result(result, synthetic=False, basis_target=None, archive_context=None):
     if synthetic:
         st.caption("Risultati su esempio sintetico; nessuna verifica su dati reali.")
     st.caption(f"{result['symbol']} | Fotografia UTC: {result['timestamp']} | Valutazione Edge: {result['valuation']}")
     target = basis_target or datetime.fromisoformat(result['timestamp']).date()
-    conversion = price_conversion(result, synthetic, target)
+    conversion = price_conversion(result, synthetic, target, archive_context)
     offset = conversion['offset']
     shift = offset if offset is not None else 0
     translated = offset is not None
@@ -220,7 +240,7 @@ def render_result(result, synthetic=False, basis_target=None):
         st.write("Calendario locale XNYS: proxy delle sessioni USA con festività e chiusure anticipate; non è un calendario ufficiale dei regolamenti CBOE.")
         st.write("Data OI inferita dalla sessione precedente, non pubblicata da CBOE:", result["oi_date"])
         st.code("SHA-256 file: " + result["sha256"] + "\nModello Edge: " + result["model_version"])
-        st.caption("Nessuna scrittura Supabase, nessun invio MT4, nessuna integrazione con Serafini. Nessun processo di acquisizione live avviato dall'app.")
+        st.caption("Motori Edge e Serafini separati. Nessuna scrittura Supabase, nessun invio MT4 e nessuna acquisizione CBOE live avviata dall'app.")
     return conversion
 
 
@@ -259,7 +279,7 @@ def automatic_archive(mode):
         _, result, report = cached
         st.success(f"Verifica aritmetica superata: {report['contracts_cross_checked']} contratti, NET e Gross GEX riconciliati.")
         target = datetime.strptime(reference.path.rsplit('/', 1)[-1][9:17], '%Y%m%d').date()
-        conversion = render_result(result, basis_target=target)
+        conversion = render_result(result, basis_target=target, archive_context=(project, key, session))
         exported_report = {**report, 'display_conversion': conversion}
         st.download_button('Scarica verifica Edge JSON', json.dumps(exported_report, indent=2, allow_nan=False),
                            file_name=f"EDGE_verifica_{result['sha256'][:12]}.json",

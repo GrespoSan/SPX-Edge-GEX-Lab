@@ -2,7 +2,8 @@
 
 Applicazione Streamlit autonoma per analizzare fotografie CBOE già archiviate.
 Usa il motore matematico originale Edge (`gexlab`), incluso con licenza MIT.
-**Non modifica e non integra Serafini, i suoi calcoli, cron-job, Supabase o MT4.**
+**Mantiene separati i motori Edge e Serafini; non modifica calcoli, repository,
+cron-job o MT4 Serafini.** Accede solo in lettura ai dati autorizzati.
 
 ## Avvio
 
@@ -51,22 +52,21 @@ dall'interfaccia pubblica.
 
 ## Livelli Future ES
 
-Per fotografie SPX reali la vista iniziale e' Future ES (equivalente). Applica
-lo stesso differenziale di APP SPX: media ES meno SPX sulle barre a 15 minuti
-della seduta cash precedente, arrotondata al punto intero. La conversione somma
-il differenziale a spot equivalente, wall, gamma flip e assi dei grafici; GEX e
-regime mantengono i valori delle opzioni SPX.
+Per fotografie SPX reali la vista iniziale e' Future ES (equivalente). Il
+differenziale viene letto dai metadati del file privato `mt4/latest.csv` gia'
+pubblicato dal sistema esistente. Edge non richiama il calcolo Serafini o Yahoo:
+arrotonda il valore pubblicato al punto intero e lo somma ai soli prezzi.
+GEX, regime e selezione dei contratti mantengono il motore Edge indipendente.
 
-E' possibile inserire lo stesso differenziale manuale verificato in APP SPX.
-Senza un differenziale disponibile i livelli restano esplicitamente SPX. Il
-valore non viene trasferito automaticamente a un'altra data e il prezzo ES
-equivalente non e' una quotazione corrente del future. Dettagli, fonte, export
-e limiti sono in [Livelli SPX ed equivalenti Future ES](docs/FUTURES.md).
+Serve un SELECT aggiuntivo sul solo file per il lettore Edge gia' configurato.
+Senza dati leggibili e coerenti con la data i livelli restano esplicitamente SPX.
+Nessun publisher, collector o collegamento MT4 viene modificato. Dettagli,
+attivazione e limiti in [Livelli SPX ed equivalenti Future ES](docs/FUTURES.md).
 
 ## Metodo
 
 Il codice in `gexlab/` è identico a quello nello ZIP fornito. Il wrapper lo usa
-senza importare formule o risultati Serafini:
+senza importare formule o profili GEX Serafini:
 
 - Gamma Black–Scholes, `r = q = 0`.
 - `GEX = segno × gamma × OI × 100 × spot² × 0,01`, USD per movimento dell'1%.

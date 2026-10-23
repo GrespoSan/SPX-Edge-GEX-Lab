@@ -19,6 +19,7 @@ def main():
     parser.add_argument('--pg-share-dir',type=Path)
     args=parser.parse_args()
     policy=(Path(__file__).resolve().parents[1]/'supabase/enable_edge_reader.sql').read_text().replace('REPLACE_WITH_EDGE_USER_UUID',UID)
+    shared_policy=(Path(__file__).resolve().parents[1]/'supabase/enable_edge_shared_basis.sql').read_text().replace('REPLACE_WITH_EDGE_USER_UUID',UID)
     with tempfile.TemporaryDirectory(prefix='edge-policy-') as temporary:
         root=Path(temporary);data=root/'data';sock=root/'socket';sock.mkdir(mode=0o700)
         init=[str(args.pg_bin_dir/'initdb'),'-D',str(data),'-U','edge_test_admin','--auth=trust','--locale=C.UTF-8','--encoding=UTF8']
@@ -96,6 +97,36 @@ def main():
             sql(policy)
             assert as_user('SELECT count(*) FROM storage.objects')[-1]=='1'
             print('PASS: clean baseline can still be installed after rejection tests')
+            sql(shared_policy,expect_error=True)
+            assert sql("SELECT count(*) FROM pg_policies WHERE policyname='edge_spx_basis_reader_v1'")[-1]=='0'
+            sql("INSERT INTO storage.objects VALUES ('spx-snapshots','mt4/latest.csv'),('spx-snapshots','mt4/private.csv'),('other','mt4/latest.csv')")
+            assert as_user("SELECT count(*) FROM storage.objects WHERE name='mt4/latest.csv'")[-1]=='0'
+            raw_before=sql("SELECT qual FROM pg_policies WHERE policyname='edge_spx_raw_reader_v1'")[-1]
+            sql(shared_policy)
+            assert sql("SELECT qual FROM pg_policies WHERE policyname='edge_spx_raw_reader_v1'")[-1]==raw_before
+            assert as_user('SELECT count(*) FROM storage.objects')[-1]=='2'
+            assert as_user("SELECT count(*) FROM storage.objects WHERE name='mt4/latest.csv'")[-1]=='1'
+            assert as_user("SELECT count(*) FROM storage.objects WHERE name='mt4/private.csv' OR bucket_id='other'")[-1]=='0'
+            assert as_user('SELECT count(*) FROM storage.objects',uid=OTHER)[-1]=='0'
+            assert as_user('SELECT count(*) FROM storage.objects',role='anon')[-1]=='0'
+            as_user("INSERT INTO storage.objects VALUES ('spx-snapshots','mt4/new.csv')",expect_error=True)
+            assert as_user("WITH changed AS (UPDATE storage.objects SET name='tampered.csv' WHERE name='mt4/latest.csv' RETURNING 1) SELECT count(*) FROM changed")[-1]=='0'
+            assert as_user("WITH changed AS (DELETE FROM storage.objects WHERE name='mt4/latest.csv' RETURNING 1) SELECT count(*) FROM changed")[-1]=='0'
+            as_user('TRUNCATE storage.objects',expect_error=True)
+            sql("UPDATE storage.objects SET name='mt4/latest.csv' WHERE bucket_id='spx-snapshots' AND name='mt4/latest.csv'")
+            sql(shared_policy)  # Safe repeated installation does not widen privileges.
+            assert sql("SELECT count(*) FROM pg_policies WHERE schemaname='storage' AND tablename='objects'")[-1]=='2'
+            print('PASS: shared basis adds only exact-file SELECT, preserves raw policy and owner writer; repeat installation is safe')
+            sql('DROP POLICY edge_spx_basis_reader_v1 ON storage.objects')
+            for enable,restore,label in cases:
+                sql(enable);sql(shared_policy,expect_error=True)
+                assert sql("SELECT count(*) FROM pg_policies WHERE policyname='edge_spx_basis_reader_v1'")[-1]=='0'
+                sql(restore)
+                print('PASS: shared policy rejected '+label+' without changing the raw policy')
+            sql('ALTER POLICY edge_spx_raw_reader_v1 ON storage.objects USING (false)')
+            sql(shared_policy,expect_error=True)
+            assert sql("SELECT count(*) FROM pg_policies WHERE policyname='edge_spx_basis_reader_v1'")[-1]=='0'
+            print('PASS: missing raw access rolls back shared policy creation')
         finally:
             subprocess.run([ctl,'-D',str(data),'-m','fast','-w','stop'],check=True,stdout=subprocess.DEVNULL)
     return 0
