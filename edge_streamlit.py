@@ -51,7 +51,10 @@ def archive_configuration():
 
 def clear_private_session():
     for key in ('edge_reader_session', 'edge_archive_raw', 'edge_archive_ref',
-                'edge_archive_fetched', 'edge_archive_analysis', 'edge_raw'):
+                'edge_archive_fetched', 'edge_archive_analysis', 'edge_raw',
+                'edge_archive_selection', 'edge_archive_mode',
+                'edge_archive_selected_day', 'edge_archive_selected_snapshot',
+                'edge_chart_zoom', 'edge_price_view'):
         st.session_state.pop(key, None)
     for key in list(st.session_state):
         if key.startswith('edge_basis_'):
@@ -396,6 +399,12 @@ def main():
     st.title("SPX · Edge GEX Lab")
     st.caption("Applicazione indipendente · fotografie CBOE in sola lettura")
     st.warning("Analisi modellata per ricerca. Posizioni dealer non osservabili; fotografie e open interest possono essere ritardati.")
+    # Authentication gate: no trading controls, file upload or charts before login.
+    config = archive_configuration()
+    if config is not None:
+        session = private_session(config)
+        if session is None:
+            st.stop()
     mode = st.selectbox("Scadenze da analizzare", MODES, index=1)
     raw, synthetic = source_data(mode)
     if synthetic is None:
