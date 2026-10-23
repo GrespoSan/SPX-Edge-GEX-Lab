@@ -219,8 +219,45 @@ def render_result(result, synthetic=False, basis_target=None, archive_context=No
         chart.add_bar(x=frame["strike"] + shift, y=frame["call_gex"] / 1e9, name="Call GEX")
         chart.add_bar(x=frame["strike"] + shift, y=frame["put_gex"] / 1e9, name="Put GEX")
         chart.add_scatter(x=frame["strike"] + shift, y=frame["net_gex"] / 1e9, name="NET GEX", mode="lines")
-        chart.add_vline(x=price(result["spot"]), line_dash="dot", annotation_text="ES equivalente" if translated else "Spot SPX")
-        chart.update_layout(xaxis_title="Strike ES equivalente" if translated else "Strike " + result['symbol'], yaxis_title=f"GEX {result['symbol']} · miliardi USD per movimento dell'1%", barmode="relative")
+        spot_display = price(result["spot"])
+        chart.add_vline(x=spot_display, line_dash="dot", line_color="#b5c6de")
+        # Display annotations above the bars, staggered to avoid text collisions.
+        markers = [
+            ("Put Wall", price(result["put_wall"]), "#26b6a6"),
+            ("Gamma Flip", price(result["flip"]), "#e7ae4e"),
+            ("Call Wall", price(result["call_wall"]), "#e27c82"),
+        ]
+        for idx, (label, value, color) in enumerate(markers):
+            if value is not None:
+                chart.add_vline(x=value, line_color=color, line_width=1.5, line_dash="dash")
+                chart.add_annotation(
+                    x=value, y=1.13 + idx * 0.085, xref="x", yref="paper",
+                    text=f"{label}: {value:,.2f}", showarrow=False,
+                    font=dict(color=color, size=12), bgcolor="rgba(15,22,33,0.95)",
+                    bordercolor=color, borderwidth=1, borderpad=4,
+                )
+        chart.add_annotation(
+            x=spot_display, y=1.02, xref="x", yref="paper",
+            text=f"Spot: {spot_display:,.2f}", showarrow=False,
+            font=dict(color="#b5c6de", size=11), bgcolor="rgba(15,22,33,0.9)",
+        )
+        chart.update_layout(
+            xaxis_title="Strike ES equivalente" if translated else "Strike " + result['symbol'],
+            yaxis_title=f"GEX {result['symbol']} · miliardi USD per movimento dell'1%",
+            barmode="relative", margin=dict(t=135), height=540,
+            legend=dict(orientation="h", y=1.01, x=1, xanchor="right"),
+        )
+        center = spot_display
+        important = [value for _, value, _ in markers if value is not None]
+        range_limit = max(200.0, max((abs(v-center)+25 for v in important), default=0))
+        view = st.radio(
+            "Ampiezza grafico", ("Zoom operativo", "Vista completa"),
+            horizontal=True, key="edge_chart_zoom",
+        )
+        if view == "Zoom operativo":
+            chart.update_xaxes(range=[center-range_limit, center+range_limit])
+        st.caption(f"Profilo {', '.join(result['expiries'])} · {('0DTE' if len(result['expiries']) == 1 else 'scadenze multiple')} · "
+                   "barre Call/Put e NET per strike; non sono segnali di acquisto/vendita.")
         st.plotly_chart(chart, width="stretch")
         exported = frame.copy()
         if translated:
