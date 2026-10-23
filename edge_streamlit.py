@@ -326,6 +326,16 @@ def automatic_archive(mode):
         st.success(f"Verifica aritmetica superata: {report['contracts_cross_checked']} contratti, NET e Gross GEX riconciliati.")
         target = datetime.strptime(reference.path.rsplit('/', 1)[-1][9:17], '%Y%m%d').date()
         conversion = render_result(result, basis_target=target, archive_context=(project, key, session))
+        # Download the exact, unmodified private snapshot used by this analysis.
+        original_name = reference.path.rsplit('/', 1)[-1]
+        st.download_button(
+            "Scarica fotografia originale CBOE",
+            data=raw,
+            file_name=original_name,
+            mime="application/gzip" if original_name.endswith(".gz") else "application/json",
+            key="edge_original_snapshot_download",
+            on_click="ignore",
+        )
         exported_report = {**report, 'display_conversion': conversion}
         st.download_button('Scarica verifica Edge JSON', json.dumps(exported_report, indent=2, allow_nan=False),
                            file_name=f"EDGE_verifica_{result['sha256'][:12]}.json",
