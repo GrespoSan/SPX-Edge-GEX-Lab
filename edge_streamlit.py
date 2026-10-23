@@ -296,10 +296,16 @@ def render_result(result, synthetic=False, basis_target=None, archive_context=No
 @st.fragment(run_every='120s')
 def automatic_archive(mode):
     config = archive_configuration()
-    session = private_session(config)
-    if session is None:
-        return
-    project, key, _ = config
+    session = st.session_state.get('edge_reader_session')
+    if config is None or session is None:
+        st.stop()
+    project, key, user_id = config
+    try:
+        session = renew_reader(project, key, session, user_id)
+        st.session_state['edge_reader_session'] = session
+    except StorageReadError:
+        clear_private_session()
+        st.rerun(scope="app")
     archive_mode = st.radio(
         'Fotografia da analizzare', ('Ultima disponibile', 'Seleziona fotografia storica'),
         horizontal=True, key='edge_archive_mode',
@@ -398,13 +404,13 @@ def main():
     st.set_page_config(page_title="SPX Edge GEX Lab", layout="wide")
     st.title("SPX · Edge GEX Lab")
     st.caption("Applicazione indipendente · fotografie CBOE in sola lettura")
-    st.warning("Analisi modellata per ricerca. Posizioni dealer non osservabili; fotografie e open interest possono essere ritardati.")
     # Authentication gate: no trading controls, file upload or charts before login.
     config = archive_configuration()
     if config is not None:
         session = private_session(config)
         if session is None:
             st.stop()
+    st.warning("Analisi modellata per ricerca. Posizioni dealer non osservabili; fotografie e open interest possono essere ritardati.")
     mode = st.selectbox("Scadenze da analizzare", MODES, index=1)
     raw, synthetic = source_data(mode)
     if synthetic is None:
