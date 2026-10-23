@@ -4,7 +4,7 @@ from __future__ import annotations
 import os
 import hashlib
 import json
-from datetime import datetime
+from datetime import datetime, date
 from pathlib import Path
 import time
 from zoneinfo import ZoneInfo
@@ -15,7 +15,7 @@ from streamlit.errors import StreamlitSecretNotFoundError
 
 from edge_clone_engine import MODES, analyze
 from edge_storage import StorageReadError
-from edge_archive import login_reader, renew_reader, latest_snapshot, download_snapshot
+from edge_archive import login_reader, renew_reader, latest_snapshot, download_snapshot, snapshots_for_day
 from edge_verification import verify_snapshot
 from edge_futures import BasisUnavailable, parse_basis, rounded_basis
 from edge_shared_basis import read_shared_basis
@@ -297,19 +297,58 @@ def automatic_archive(mode):
     if session is None:
         return
     project, key, _ = config
+    archive_mode = st.radio(
+        'Fotografia da analizzare', ('Ultima disponibile', 'Seleziona fotografia storica'),
+        horizontal=True, key='edge_archive_mode',
+    )
+    selected_reference = None
+    if archive_mode == 'Seleziona fotografia storica':
+        selected_day = st.date_input(
+            'Data della fotografia originale', value=date.today(),
+            min_value=date(2026, 10, 1), max_value=date.today(),
+            key='edge_archive_selected_day',
+        )
+        try:
+            available = snapshots_for_day(project, key, session, selected_day)
+            if not available:
+                st.info('Nessuna fotografia SPX originale disponibile per questa data. Scegli un altro giorno.')
+                return
+            names = {ref.path.rsplit('/', 1)[-1]: ref for ref in available}
+            chosen = st.selectbox(
+                'Fotografia CBOE disponibile (orario riportato nel nome file)',
+                list(names), index=len(names)-1, key='edge_archive_selected_snapshot',
+            )
+            selected_reference = names[chosen]
+            st.caption('La fotografia è letta dal medesimo archivio privato di Serafini; i calcoli restano esclusivamente Edge.')
+        except StorageReadError as error:
+            st.error(str(error))
+            return
     force = st.button('Aggiorna ora', key='edge_archive_refresh')
     now = time.monotonic()
     fetched = st.session_state.get('edge_archive_fetched', 0)
     try:
-        if force or 'edge_archive_raw' not in st.session_state or now - fetched >= 110:
-            reference = latest_snapshot(project, key, session)
-            if reference != st.session_state.get('edge_archive_ref') or 'edge_archive_raw' not in st.session_state:
-                raw = download_snapshot(project, key, session, reference)
-                st.session_state['edge_archive_raw'] = raw
+        if archive_mode == 'Ultima disponibile':
+            refresh_due = force or 'edge_archive_raw' not in st.session_state or now - fetched >= 110 or st.session_state.get('edge_archive_selection') != 'latest'
+            if refresh_due:
+                reference = latest_snapshot(project, key, session)
+                if reference != st.session_state.get('edge_archive_ref') or 'edge_archive_raw' not in st.session_state:
+                    raw = download_snapshot(project, key, session, reference)
+                    st.session_state['edge_archive_raw'] = raw
+                    st.session_state['edge_archive_ref'] = reference
+                st.session_state['edge_archive_fetched'] = now
+                st.session_state['edge_archive_selection'] = 'latest'
+        else:
+            reference = selected_reference
+            if force or reference != st.session_state.get('edge_archive_ref') or 'edge_archive_raw' not in st.session_state or st.session_state.get('edge_archive_selection') != reference.path:
+                st.session_state['edge_archive_raw'] = download_snapshot(project, key, session, reference)
                 st.session_state['edge_archive_ref'] = reference
-            st.session_state['edge_archive_fetched'] = now
+                st.session_state['edge_archive_selection'] = reference.path
+                st.session_state['edge_archive_fetched'] = now
         reference = st.session_state['edge_archive_ref']
-        st.caption('Aggiornamento automatico ogni 2 minuti mentre questa pagina è aperta. Fotografia selezionata dalla settimana di archivio più recente disponibile.')
+        if archive_mode == 'Ultima disponibile':
+            st.caption('Aggiornamento automatico ogni 2 minuti mentre la pagina è aperta; viene letta l’ultima fotografia disponibile.')
+        else:
+            st.caption('Fotografia storica fissata: non passa automaticamente a quella più recente.')
         st.caption('File archiviato: ' + reference.path)
         raw = st.session_state['edge_archive_raw']
         analysis_key = (hashlib.sha256(raw).hexdigest(), mode)
