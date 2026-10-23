@@ -148,3 +148,12 @@ def test_per_strike_net_reconciles_for_fixture_inside_the_display_band():
     assert (rows.call_gex >= 0).all() and (rows.put_gex <= 0).all()
     assert rows.net_gex.sum() == pytest.approx(report['net'])
     assert (rows.call_gex.abs() + rows.put_gex.abs()).sum() == pytest.approx(report['gross'])
+
+def test_overnight_ny_prior_calendar_day_still_selects_next_session_0dte():
+    # Oct 14 03:40 UTC is Oct 13 23:40 NY, but the next
+    # Globex trading day and the 0DTE expiry are both Oct 14.
+    obj = snapshot('2026-10-14 03:40:33')
+    result = E.analyze(payload(obj), '0DTE')
+    assert result['expiries'] == ['2026-10-14']
+    assert result['total'] == 10
+
