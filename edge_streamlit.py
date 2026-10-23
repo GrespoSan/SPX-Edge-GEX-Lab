@@ -97,17 +97,25 @@ def private_session(config):
 
 
 def source_data(mode):
+    # Everyday operation always reads the archive; manual/test modes remain
+    # available only on demand, without cluttering the daily interface.
     config = archive_configuration()
-    options = (AUTO, UPLOAD, DEMO) if config else (UPLOAD, AUTO, DEMO)
-    source = st.radio("Sorgente dati", options, horizontal=True)
-    if source == AUTO:
-        automatic_archive(mode)
-        return None, None
-    if source == UPLOAD:
-        uploaded = st.file_uploader("Fotografia originale CBOE (.json o .json.gz)", type=("json", "gz"))
-        return (uploaded.getvalue() if uploaded else None), False
-    st.warning("ESEMPIO SINTETICO: dati creati per test, non una fotografia reale CBOE.")
-    return (ROOT / "fixtures/synthetic_cboe_spx.json").read_bytes(), True
+    with st.expander("Strumenti avanzati · caricamento e test", expanded=False):
+        alternative = st.radio(
+            "Sorgente alternativa", ("Archivio automatico", UPLOAD, DEMO),
+            horizontal=True, key="edge_advanced_source",
+        )
+        if alternative == UPLOAD:
+            uploaded = st.file_uploader("Fotografia originale CBOE (.json o .json.gz)", type=("json", "gz"))
+            return (uploaded.getvalue() if uploaded else None), False
+        if alternative == DEMO:
+            st.warning("ESEMPIO SINTETICO: dati creati per test, non una fotografia reale CBOE.")
+            return (ROOT / "fixtures/synthetic_cboe_spx.json").read_bytes(), True
+    if config is None:
+        st.info("Archivio privato non configurato; usare gli strumenti avanzati per caricare un file.")
+        return None, False
+    automatic_archive(mode)
+    return None, None
 
 
 def price_conversion(result, synthetic, target, archive_context=None):
@@ -411,7 +419,7 @@ def main():
         if session is None:
             st.stop()
     st.warning("Analisi modellata per ricerca. Posizioni dealer non osservabili; fotografie e open interest possono essere ritardati.")
-    mode = st.selectbox("Scadenze da analizzare", MODES, index=1)
+    mode = st.selectbox("Scadenze da analizzare", MODES, index=0)
     raw, synthetic = source_data(mode)
     if synthetic is None:
         return
