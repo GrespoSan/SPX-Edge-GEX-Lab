@@ -37,8 +37,9 @@ Il controllo locale dei claim JWT non sostituisce questo esame.
 ## Primo passo: controllo che non modifica il progetto
 
 Eseguire `supabase/inspect_edge_access.sql` nel SQL Editor del progetto esistente.
-Il comando usa una transazione READ ONLY e legge esclusivamente metadati di
-sicurezza e nomi di fotografie, senza accedere a chiavi o password.
+Il comando contiene una sola SELECT e legge esclusivamente metadati di
+sicurezza e nomi di fotografie, senza accedere a chiavi o password. Il risultato
+e' una sola cella, `edge_access_report`, da copiare per la verifica.
 Non cambia utenti, ruoli, policy, bucket, cron-job o righe applicative.
 I risultati vanno condivisi privatamente per la verifica, non commessi nel
 repository pubblico. Non includere esportazioni di Secrets o credenziali.
