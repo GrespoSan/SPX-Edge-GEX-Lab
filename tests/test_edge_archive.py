@@ -11,6 +11,7 @@ import edge_archive as A
 import edge_verification as V
 import edge_futures as F
 import edge_shared_basis as S
+import edge_market as M
 from edge_storage import StorageReadError
 
 URL = 'https://exampleproject.supabase.co'
@@ -19,6 +20,13 @@ UID = '11111111-2222-4333-8444-555555555555'
 OTHER = 'aaaaaaaa-bbbb-4ccc-8ddd-eeeeeeeeeeee'
 NOW = 1_790_000_000
 ROOT = Path(__file__).resolve().parents[1]
+
+
+@pytest.fixture(autouse=True)
+def no_external_quotes(monkeypatch):
+    def unavailable(*args,**kwargs):
+        raise M.MarketUnavailable('No live market requests in isolated tests.')
+    monkeypatch.setattr(M,'fetch_market',unavailable)
 
 
 def jwt(uid=UID, role='authenticated', expiry=NOW+3600):
@@ -159,10 +167,12 @@ def configured_app():
 def test_public_page_cannot_read_private_archive_without_login(monkeypatch):
     monkeypatch.setattr(A,'latest_snapshot',lambda *a,**k:pytest.fail('Anonymous storage request'))
     monkeypatch.setattr(S,'read_shared_basis',lambda *a,**k:pytest.fail('Anonymous shared feed request'))
+    monkeypatch.setattr(M,'fetch_market',lambda *a,**k:pytest.fail('Anonymous market request'))
     app=configured_app().run(timeout=20)
     assert not app.exception and not app.error and len(app.metric)==0
     assert [box.label for box in app.text_input]==['Email Edge','Password Edge']
     assert len(app.get('form'))==1
+    assert not app.radio and not app.selectbox and not app.get('download_button')
 
 
 def test_private_login_automatic_selection_cached_rerun_and_logout(monkeypatch):
@@ -187,26 +197,26 @@ def test_private_login_automatic_selection_cached_rerun_and_logout(monkeypatch):
     app.button[0].click().run(timeout=20)
     assert not app.exception and not app.error and len(app.metric)==5
     assert calls==['list','get']
-    assert checks==['Prossime 4 scadenze']
+    assert checks==['0DTE']
     report=app.session_state['edge_archive_analysis'][2]
-    assert report['arithmetic_check']=='passed' and report['contracts_cross_checked']==40
+    assert report['arithmetic_check']=='passed' and report['contracts_cross_checked']==10
     assert report['independent_net_gex']==pytest.approx(report['net'])
     assert report['independent_gross_gex']==pytest.approx(report['gross'])
-    assert app.success and '40 contratti' in app.success[0].value
-    assert len(app.get('download_button'))==2
+    assert app.success and '10 contratti' in app.success[0].value
+    assert len(app.get('download_button'))==3
     assert 'PRIVATE' not in json.dumps(report)
     next(button for button in app.button if button.label=='Aggiorna ora').click().run(timeout=20)
     assert not app.exception and calls==['list','get','list']
-    assert checks==['Prossime 4 scadenze']
-    app.selectbox[0].set_value('0DTE').run(timeout=20)
+    assert checks==['0DTE']
+    app.selectbox[0].set_value('Prossime 4 scadenze').run(timeout=20)
     assert not app.exception and len(app.metric)==5 and calls==['list','get','list']
-    assert checks==['Prossime 4 scadenze','0DTE']
+    assert checks==['0DTE','Prossime 4 scadenze']
     previous_hash=app.session_state['edge_archive_analysis'][2]['sha256']
     version[0]='2'
     next(button for button in app.button if button.label=='Aggiorna ora').click().run(timeout=20)
     assert not app.exception and not app.error
     assert calls==['list','get','list','list','get']
-    assert checks==['Prossime 4 scadenze','0DTE','0DTE']
+    assert checks==['0DTE','Prossime 4 scadenze','Prossime 4 scadenze']
     assert app.session_state['edge_archive_analysis'][2]['sha256']!=previous_hash
     next(button for button in app.button if button.label=='Esci da Edge').click().run(timeout=20)
     assert not app.exception and len(app.metric)==0
@@ -247,7 +257,7 @@ def test_es_translation_preserves_spx_math_and_exports_and_scopes_override_to_da
     import io
     from edge_clone_engine import analyze
     raw=(ROOT/'fixtures/synthetic_cboe_spx.json').read_bytes()
-    original=analyze(raw,'Prossime 4 scadenze')
+    original=analyze(raw,'0DTE')
     current_day=['21']
     downloads={}
     original_button=st.download_button
@@ -283,18 +293,22 @@ def test_es_translation_preserves_spx_math_and_exports_and_scopes_override_to_da
     assert report['spot']==6000 and report['display_conversion']['offset']==40
     assert report['display_conversion']['target_date']=='2026-10-21'
     csv=pd.read_csv(io.BytesIO(downloads['Scarica profilo Edge CSV']))
+    assert downloads['Scarica fotografia originale CBOE']==raw
     assert (csv.strike_es==csv.strike_spx+40).all()
     assert csv.net_gex.to_list()==pytest.approx(original['rows'].net_gex.to_list())
     figures=[json.loads(element.proto.spec) for element in app.get('plotly_chart')]
     import numpy as np
     def array(value):
         return np.frombuffer(base64.b64decode(value['bdata']),dtype=value['dtype']) if isinstance(value,dict) else np.array(value)
-    assert array(figures[0]['data'][0]['x'])==pytest.approx(original['rows'].strike.to_numpy()+40)
-    assert figures[0]['layout']['shapes'][0]['x0']==6040
+    call=next(trace for trace in figures[0]['data'] if trace.get('name')=='Call GEX')
+    assert call['orientation']=='h' and call['xaxis']=='x2'
+    assert array(call['y'])==pytest.approx(original['rows'].strike.to_numpy()+40)
+    assert array(call['x'])==pytest.approx(original['rows'].call_gex.to_numpy()/1e9)
+    assert figures[0]['layout']['yaxis']['range']==figures[0]['layout']['yaxis2']['range']
     assert array(figures[1]['data'][0]['x'])==pytest.approx(original['curve'].spot.to_numpy()+40)
-    app.radio[1].set_value('Indice SPX').run(timeout=20)
+    app.radio(key='edge_price_view').set_value('Indice SPX').run(timeout=20)
     assert not app.exception and app.metric[0].value=='6,000.00'
-    app.radio[1].set_value('Future ES (equivalente)').run(timeout=20)
+    app.radio(key='edge_price_view').set_value('Future ES (equivalente)').run(timeout=20)
     assert not app.exception and app.metric[0].value=='6,040.00' and len(calls)==1
     current_day[0]='22'
     next(b for b in app.button if b.label=='Aggiorna ora').click().run(timeout=20)
@@ -341,3 +355,75 @@ def test_automatic_es_basis_rounded_once_per_date_and_manual_override_retained(m
     assert not app.exception and app.metric[0].value=='6,041.00' and len(calls)==4
     next(b for b in app.button if b.label=='Esci da Edge').click().run(timeout=20)
     assert not app.exception and 'edge_basis_days' not in app.session_state
+
+
+def test_price_refresh_updates_only_left_panel_and_retains_0dte_and_calculation_cache(monkeypatch):
+    from datetime import datetime,timedelta,timezone
+    import pandas as pd
+    raw=(ROOT/'fixtures/synthetic_cboe_spx.json').read_bytes()
+    monkeypatch.setattr(A,'login_reader',lambda *a,**k:session(expiry=10**10))
+    monkeypatch.setattr(A,'renew_reader',lambda *a,**k:a[2])
+    monkeypatch.setattr(A,'latest_snapshot',lambda *a,**k:A.SnapshotRef('2026-W43/snapshots/SPX_CBOE_20261021_160000.json.gz','1'))
+    monkeypatch.setattr(A,'download_snapshot',lambda *a,**k:raw)
+    checks=[];requests=[];price=[6045.];original=V.verify_snapshot
+    def verify(*args):
+        checks.append(args[1]);return original(*args)
+    monkeypatch.setattr(V,'verify_snapshot',verify)
+    monkeypatch.setattr(S,'read_shared_basis',lambda *a,**k:{'basis':40.,'reference_date':'2026-10-20',
+        'published_utc':'2026-10-21T16:00:00+00:00','source':'Existing archive'})
+    def market(symbol,*,day=None):
+        requests.append((symbol,day));now=datetime.now(timezone.utc)
+        candles=pd.DataFrame([{'time':now-timedelta(minutes=10-i*5),'open':6040+i,
+                               'high':6045+i,'low':6039+i,'close':6042+i} for i in range(2)])
+        return {'symbol':symbol,'price':price[0],'timestamp':now.isoformat(),'kind':'quote',
+                'source':'Yahoo Finance','delay_minutes':10,'candles':candles}
+    monkeypatch.setattr(M,'fetch_market',market)
+    app=configured_app();app.session_state['edge_price_view']='Future ES (equivalente)'
+    app.run(timeout=20)
+    app.text_input[0].set_value('edge@example.test');app.text_input[1].set_value('PRIVATE_PASSWORD')
+    app.button[0].click().run(timeout=20)
+    assert not app.exception and not app.error and checks==['0DTE'] and requests==[('ES=F',None)]
+    assert app.selectbox[0].value=='0DTE' and app.metric[0].value=='6,040.00'
+    net=app.session_state['edge_archive_analysis'][1]['net']
+    first=json.loads(app.get('plotly_chart')[0].proto.spec)
+    assert first['data'][0]['type']=='candlestick' and first['data'][0]['xaxis']=='x'
+    call=next(trace for trace in first['data'] if trace.get('name')=='Call GEX')
+    assert call['xaxis']=='x2' and first['layout']['yaxis2']['matches']=='y'
+    price[0]=6050.
+    next(button for button in app.button if button.label=='Rileggi candele e prezzo').click().run(timeout=20)
+    assert not app.exception and not app.error and checks==['0DTE'] and len(requests)==2
+    second=json.loads(app.get('plotly_chart')[0].proto.spec)
+    marker=next(trace for trace in second['data'] if trace.get('name')=='Ultimo prezzo disponibile')
+    assert marker['y']==[6050.]
+    assert app.session_state['edge_archive_analysis'][1]['net']==net
+    next(button for button in app.button if button.label=='Esci da Edge').click().run(timeout=20)
+    assert not app.exception and 'edge_market_records' not in app.session_state
+
+
+def test_historical_picker_keeps_selected_photo_and_requests_its_day_candles(monkeypatch):
+    from datetime import date,datetime,timezone
+    import pandas as pd
+    raw=(ROOT/'fixtures/synthetic_cboe_spx.json').read_bytes()
+    requests=[]
+    monkeypatch.setattr(A,'login_reader',lambda *a,**k:session(expiry=10**10))
+    monkeypatch.setattr(A,'renew_reader',lambda *a,**k:a[2])
+    monkeypatch.setattr(A,'latest_snapshot',lambda *a,**k:A.SnapshotRef('2026-W43/snapshots/SPX_CBOE_20261021_160000.json.gz','1'))
+    monkeypatch.setattr(A,'download_snapshot',lambda *a,**k:raw)
+    ref=A.SnapshotRef('2026-W42/snapshots/SPX_CBOE_20261014_135903.json.gz','1')
+    monkeypatch.setattr(A,'snapshots_for_day',lambda p,k,s,day:[ref] if day==date(2026,10,14) else [])
+    def market(symbol,*,day=None):
+        requests.append((symbol,day))
+        stamp=datetime(2026,10,14,14,tzinfo=timezone.utc).isoformat()
+        return {'symbol':symbol,'price':6005.,'timestamp':stamp,'kind':'closed_bar',
+                'source':'Yahoo Finance','delay_minutes':None,'candles':pd.DataFrame()}
+    monkeypatch.setattr(M,'fetch_market',market)
+    app=configured_app().run(timeout=20)
+    app.text_input[0].set_value('edge@example.test');app.text_input[1].set_value('PRIVATE_PASSWORD')
+    app.button[0].click().run(timeout=20)
+    app.radio(key='edge_archive_mode').set_value('Seleziona fotografia storica').run(timeout=20)
+    app.date_input[0].set_value(date(2026,10,14)).run(timeout=20)
+    assert not app.exception and not app.error and requests[-1]==('^GSPC',date(2026,10,14))
+    assert app.session_state['edge_archive_ref']==ref
+    assert app.radio(key='edge_archive_mode').value=='Seleziona fotografia storica'
+    assert any('non è una simulazione' in c.value for c in app.caption)
+    assert any(button.label=='Scarica fotografia originale CBOE' for button in app.get('download_button'))

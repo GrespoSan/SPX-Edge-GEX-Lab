@@ -65,6 +65,11 @@ attivazione e limiti in [Livelli SPX ed equivalenti Future ES](docs/FUTURES.md).
 
 ## Metodo
 
+La vista affianca [candele e profilo GEX verticale](docs/CHART_LAYOUT.md), con
+prezzi allineati sulla stessa scala. Sono mantenuti selezione storica, 0DTE e
+download originali. Le candele Yahoo possono essere ritardate o indisponibili;
+il loro prezzo serve alla visualizzazione e non modifica il calcolo GEX.
+
 Il codice in `gexlab/` è identico a quello nello ZIP fornito. Il wrapper lo usa
 senza importare formule o profili GEX Serafini:
 

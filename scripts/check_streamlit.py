@@ -32,7 +32,7 @@ def receive_run(socket):
             element_type = element.WhichOneof('type')
             if element_type == 'exception':
                 raise RuntimeError('Server returned an application exception; inspect deployment logs.')
-            if element_type == 'radio' and element.radio.label == 'Sorgente dati':
+            if element_type == 'radio' and element.radio.label in ('Sorgente dati','Sorgente alternativa'):
                 result['radio_id'] = element.radio.id
             if element_type == 'heading':
                 result['titles'].append(element.heading.body)

@@ -31,6 +31,6 @@ def test_synthetic_snapshot_runs_full_app_and_all_expiry_modes():
 
 def test_unconfigured_automatic_archive_does_not_crash_or_expose_data():
     app = AppTest.from_file(str(ROOT / 'edge_streamlit.py')).run(timeout=20)
-    app.radio[0].set_value('Archivio SPX automatico').run(timeout=20)
+    app.radio[0].set_value('Archivio automatico').run(timeout=20)
     assert not app.exception and not app.error and len(app.metric) == 0
     assert any('non configurato' in message.value for message in app.info)

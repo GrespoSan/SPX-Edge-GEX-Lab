@@ -19,6 +19,8 @@ from edge_archive import login_reader, renew_reader, latest_snapshot, download_s
 from edge_verification import verify_snapshot
 from edge_futures import BasisUnavailable, parse_basis, rounded_basis
 from edge_shared_basis import read_shared_basis
+from edge_market import MarketUnavailable, fetch_market
+from edge_charts import candles_gex_figure
 
 ROOT = Path(__file__).resolve().parent
 UPLOAD = "Carica fotografia CBOE"
@@ -57,7 +59,7 @@ def clear_private_session():
                 'edge_chart_zoom', 'edge_price_view'):
         st.session_state.pop(key, None)
     for key in list(st.session_state):
-        if key.startswith('edge_basis_'):
+        if key.startswith(('edge_basis_', 'edge_market_')):
             st.session_state.pop(key, None)
 
 
@@ -195,7 +197,42 @@ def price_conversion(result, synthetic, target, archive_context=None):
             'automatic_estimate': estimate}
 
 
-def render_result(result, synthetic=False, basis_target=None, archive_context=None):
+def chart_market(result, conversion, target, synthetic, historical):
+    if synthetic:
+        return None, 'Esempio sintetico: nessuna candela reale'
+    symbol = 'ES=F' if conversion['unit']=='ES_equivalent' else '^GSPC' if result['symbol']=='SPX' else '^NDX'
+    day = target if historical else None
+    cache_key = (symbol,day.isoformat() if day is not None else 'latest')
+    records = st.session_state.setdefault('edge_market_records',{})
+    record = records.setdefault(cache_key,{'at':None,'market':None,'error':''})
+    refresh = st.button('Rileggi candele e prezzo',key='edge_market_refresh')
+    current = time.monotonic()
+    ttl = 3600 if historical and target<datetime.now(ZoneInfo('Europe/Rome')).date() else 110
+    if refresh or record['at'] is None or current-record['at']>=ttl:
+        try:
+            record.update(market=fetch_market(symbol,day=day),error='')
+        except MarketUnavailable as error:
+            record.update(market=None,error=str(error))
+        record['at'] = current
+    market = record['market']
+    if historical:
+        st.caption(f"Candele della giornata selezionata: {target:%d/%m/%Y} (Italia). La vista può includere barre successive alla fotografia; non è una simulazione limitata all’ora di acquisizione.")
+    if market is None:
+        st.caption('Candele/prezzo non disponibili da Yahoo. '+record['error'])
+        return None, 'Candele non disponibili<br>Nessun prezzo corrente simulato'
+    label = 'Ultima chiusura 5m disponibile' if market['kind']=='closed_bar' else 'Ultima quotazione disponibile'
+    st.caption(f"{symbol} · {label}: {market['price']:,.2f} · {italian_time(market['timestamp'])} · Yahoo Finance")
+    age = max(0,int(time.time()-datetime.fromisoformat(market['timestamp']).timestamp()))
+    if not historical and age>1200:
+        st.warning('Quotazione datata: controlla l’orario. Lo spot della fotografia resta un riferimento storico.')
+    if not historical and datetime.fromisoformat(market['timestamp']).astimezone(ZoneInfo('Europe/Rome')).date()!=target:
+        st.warning('Candele e fotografia riguardano giornate diverse: i livelli restano quelli della fotografia selezionata.')
+    delay = market['delay_minutes']
+    st.caption(f'Ritardo dichiarato dalla fonte: {delay:g} min.' if delay is not None else 'Ritardo non dichiarato dalla fonte; dati senza garanzia di tempo reale.')
+    return market, None
+
+
+def render_result(result, synthetic=False, basis_target=None, archive_context=None, historical=False):
     if synthetic:
         st.caption("Risultati su esempio sintetico; nessuna verifica su dati reali.")
     st.caption(f"{result['symbol']} | Valutazione Edge (Italia): {italian_time(result['valuation'])}")
@@ -224,50 +261,17 @@ def render_result(result, synthetic=False, basis_target=None, archive_context=No
     st.write(f"NET GEX: **{result['net'] / 1e9:,.4f} miliardi USD/1%** · Gross GEX: **{result['gross'] / 1e9:,.4f} miliardi USD/1%**")
     frame = result["rows"]
     if not frame.empty:
-        chart = go.Figure()
-        chart.add_bar(x=frame["strike"] + shift, y=frame["call_gex"] / 1e9, name="Call GEX", marker_color="#22b573")
-        chart.add_bar(x=frame["strike"] + shift, y=frame["put_gex"] / 1e9, name="Put GEX", marker_color="#e64b4b")
-        chart.add_scatter(x=frame["strike"] + shift, y=frame["net_gex"] / 1e9, name="NET GEX", mode="lines", line=dict(color="#f4a2b3", width=2))
-        spot_display = price(result["spot"])
-        chart.add_vline(x=spot_display, line_dash="dot", line_color="#b5c6de")
-        # Display annotations above the bars, staggered to avoid text collisions.
-        markers = [
-            ("Put Wall", price(result["put_wall"]), "#e64b4b"),
-            ("Gamma Flip", price(result["flip"]), "#e7ae4e"),
-            ("Call Wall", price(result["call_wall"]), "#22b573"),
-        ]
-        for idx, (label, value, color) in enumerate(markers):
-            if value is not None:
-                chart.add_vline(x=value, line_color=color, line_width=1.5, line_dash="dash")
-                chart.add_annotation(
-                    x=value, y=1.13 + idx * 0.085, xref="x", yref="paper",
-                    text=f"{label}: {value:,.2f}", showarrow=False,
-                    font=dict(color=color, size=12), bgcolor="rgba(15,22,33,0.95)",
-                    bordercolor=color, borderwidth=1, borderpad=4,
-                )
-        chart.add_annotation(
-            x=spot_display, y=1.02, xref="x", yref="paper",
-            text=f"Spot: {spot_display:,.2f}", showarrow=False,
-            font=dict(color="#b5c6de", size=11), bgcolor="rgba(15,22,33,0.9)",
-        )
-        chart.update_layout(
-            xaxis_title="Strike ES equivalente" if translated else "Strike " + result['symbol'],
-            yaxis_title=f"GEX {result['symbol']} · miliardi USD per movimento dell'1%",
-            barmode="relative", margin=dict(t=135), height=540,
-            legend=dict(orientation="h", y=1.01, x=1, xanchor="right"),
-        )
-        center = spot_display
-        important = [value for _, value, _ in markers if value is not None]
-        range_limit = max(200.0, max((abs(v-center)+25 for v in important), default=0))
         view = st.radio(
             "Ampiezza grafico", ("Zoom operativo", "Vista completa"),
             horizontal=True, key="edge_chart_zoom",
         )
-        if view == "Zoom operativo":
-            chart.update_xaxes(range=[center-range_limit, center+range_limit])
+        market, unavailable = chart_market(result,conversion,target,synthetic,
+                                            historical or archive_context is None)
+        chart = candles_gex_figure(result,shift,market,full=view=="Vista completa",empty_message=unavailable)
+        chart.update_yaxes(title="Prezzo ES" if translated else "Prezzo " + result['symbol'],row=1,col=1)
         st.caption(f"Profilo {', '.join(result['expiries'])} · {('0DTE' if len(result['expiries']) == 1 else 'scadenze multiple')} · "
-                   "barre Call/Put e NET per strike; non sono segnali di acquisto/vendita.")
-        st.plotly_chart(chart, width="stretch")
+                   "prezzi allineati verticalmente; Call verdi, Put rosse, NET rosa. Il prezzo delle candele non modifica i calcoli GEX.")
+        st.plotly_chart(chart, width="stretch",key="edge_candles_gex")
         exported = frame.copy()
         if translated:
             exported = exported.rename(columns={'strike': 'strike_spx'})
@@ -379,7 +383,8 @@ def automatic_archive(mode):
         _, result, report = cached
         st.success(f"Verifica aritmetica superata: {report['contracts_cross_checked']} contratti, NET e Gross GEX riconciliati.")
         target = datetime.strptime(reference.path.rsplit('/', 1)[-1][9:17], '%Y%m%d').date()
-        conversion = render_result(result, basis_target=target, archive_context=(project, key, session))
+        conversion = render_result(result, basis_target=target, archive_context=(project, key, session),
+                                   historical=archive_mode=='Seleziona fotografia storica')
         # Download the exact, unmodified private snapshot used by this analysis.
         original_name = reference.path.rsplit('/', 1)[-1]
         st.download_button(
