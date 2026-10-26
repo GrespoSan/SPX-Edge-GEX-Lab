@@ -295,6 +295,39 @@ def render_result(result, synthetic=False, basis_target=None, archive_context=No
         st.download_button("Scarica profilo Edge CSV", exported.to_csv(index=False).encode(),
                            file_name=f"EDGE_{'ES_equivalente_' if translated else ''}{result['symbol']}_{'SYNTHETIC_' if synthetic else ''}{result['sha256'][:12]}.csv",
                            mime="text/csv")
+        # Portable Edge result for the external, read-only Serafini comparison panel.
+        # No Edge calculation is rerun in the Serafini application.
+        if not synthetic:
+            edge_transfer = {
+                "schema": "edge-gex-context-v1", "source": "Edge GEX Lab",
+                "symbol": result["symbol"], "mode": result["mode"],
+                "timestamp": result["timestamp"], "valuation": result["valuation"],
+                "sha256": result["sha256"], "expiries": result["expiries"],
+                "spot_spx": result["spot"], "es_basis": offset,
+                "spot_es": price(result["spot"]) if translated else None,
+                "call_wall_spx": result["call_wall"],
+                "put_wall_spx": result["put_wall"], "gamma_flip_spx": result["flip"],
+                "call_wall_es": price(result["call_wall"]) if translated else None,
+                "put_wall_es": price(result["put_wall"]) if translated else None,
+                "gamma_flip_es": price(result["flip"]) if translated else None,
+                "net_gex": result["net"], "gross_gex": result["gross"],
+                "regime": result["regime"], "quality_pct": result["quality_pct"],
+                "rows": [
+                    {"strike_spx": float(row["strike"]), "call_gex": float(row["call_gex"]),
+                     "put_gex": float(row["put_gex"]), "net_gex": float(row["net_gex"])}
+                    for _, row in frame.iterrows()
+                ],
+                "curve": [
+                    {"spot_spx": float(row["spot"]), "net_gex": float(row["net_gex"])}
+                    for _, row in result["curve"].iterrows()
+                ],
+            }
+            st.download_button(
+                "Scarica confronto Edge per SPX (JSON)",
+                data=json.dumps(edge_transfer, ensure_ascii=False, allow_nan=False).encode("utf-8"),
+                file_name=f"EDGE_Confronto_{result['sha256'][:12]}.json",
+                mime="application/json", key="edge_compare_export",
+            )
     else:
         st.info("Nessuno strike nella fascia del grafico; i totali includono comunque la catena selezionata.")
     st.caption("Grafico e wall: strike entro ±10% dallo spot. Totali e curva ipotetica: contratti selezionati acquisiti entro ±20%.")
