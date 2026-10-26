@@ -50,7 +50,9 @@ def candles_gex_figure(result, shift=0., market=None, *, full=False, empty_messa
                             row=1,col=1)
     else:
         figure.add_annotation(x=.5,y=.5,xref='x domain',yref='y domain',showarrow=False,
-                              text=empty_message or 'Candele non disponibili',font=dict(size=14))
+                              text=empty_message or 'Candele non disponibili',font=dict(size=14),
+                              bgcolor='rgba(14,17,23,0.9)',borderpad=10)
+        figure.update_xaxes(showticklabels=False,showgrid=False,zeroline=False,row=1,col=1)
     if market is not None:
         figure.add_scatter(x=[market['timestamp']],y=[market['price']],mode='markers',
                            marker=dict(color='#facc15',size=9),name='Ultimo prezzo disponibile',
@@ -91,7 +93,8 @@ def candles_gex_figure(result, shift=0., market=None, *, full=False, empty_messa
     # Explicit equal ranges plus matches keep zoom/pan and initial view aligned.
     figure.update_yaxes(range=limits,nticks=12,row=1,col=1)
     figure.update_yaxes(range=limits,matches='y',showticklabels=True,nticks=12,row=1,col=2)
-    figure.update_xaxes(title='Ora italiana · chiusura candela',rangeslider_visible=False,row=1,col=1)
+    figure.update_xaxes(title='Ora italiana · chiusura candela' if candles is not None and not candles.empty else None,
+                        rangeslider_visible=False,row=1,col=1)
     figure.update_xaxes(title=f"GEX {result['symbol']} · miliardi USD/1%",zeroline=True,row=1,col=2)
     figure.update_layout(height=620,barmode='relative',margin=dict(t=105,b=85,l=35,r=35),
                          legend=dict(orientation='h',y=-.16,x=.5,xanchor='center'),hovermode='closest',

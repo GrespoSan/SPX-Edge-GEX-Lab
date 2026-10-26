@@ -208,18 +208,23 @@ def chart_market(result, conversion, target, synthetic, historical):
     refresh = st.button('Rileggi candele e prezzo',key='edge_market_refresh')
     current = time.monotonic()
     ttl = 3600 if historical and target<datetime.now(ZoneInfo('Europe/Rome')).date() else 110
+    if record['error']:
+        ttl = 30
     if refresh or record['at'] is None or current-record['at']>=ttl:
         try:
             record.update(market=fetch_market(symbol,day=day),error='')
         except MarketUnavailable as error:
-            record.update(market=None,error=str(error))
+            record['error'] = str(error)
         record['at'] = current
     market = record['market']
     if historical:
         st.caption(f"Candele della giornata selezionata: {target:%d/%m/%Y} (Italia). La vista può includere barre successive alla fotografia; non è una simulazione limitata all’ora di acquisizione.")
     if market is None:
         st.caption('Candele/prezzo non disponibili da Yahoo. '+record['error'])
-        return None, 'Candele non disponibili<br>Nessun prezzo corrente simulato'
+        detail = record['error'].replace(' (','<br>(').replace('; ','<br>')
+        return None, 'Candele non disponibili<br>'+detail+'<br>Premi «Rileggi candele e prezzo» per riprovare'
+    if record['error']:
+        st.warning('Aggiornamento prezzi non riuscito. Mostro gli ultimi dati letti in questa sessione, non aggiornati. '+record['error'])
     label = 'Ultima chiusura 5m disponibile' if market['kind']=='closed_bar' else 'Ultima quotazione disponibile'
     st.caption(f"{symbol} · {label}: {market['price']:,.2f} · {italian_time(market['timestamp'])} · Yahoo Finance")
     age = max(0,int(time.time()-datetime.fromisoformat(market['timestamp']).timestamp()))

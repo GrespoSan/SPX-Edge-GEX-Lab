@@ -396,6 +396,23 @@ def test_price_refresh_updates_only_left_panel_and_retains_0dte_and_calculation_
     marker=next(trace for trace in second['data'] if trace.get('name')=='Ultimo prezzo disponibile')
     assert marker['y']==[6050.]
     assert app.session_state['edge_archive_analysis'][1]['net']==net
+    records=app.session_state['edge_market_records']
+    original_stamp=records[('ES=F','latest')]['market']['timestamp']
+    def unavailable(*a,**k):
+        raise M.MarketUnavailable('HTTP 429')
+    monkeypatch.setattr(M,'fetch_market',unavailable)
+    next(button for button in app.button if button.label=='Rileggi candele e prezzo').click().run(timeout=20)
+    assert not app.exception and not app.error and checks==['0DTE']
+    assert any('non aggiornati' in warning.value and 'HTTP 429' in warning.value for warning in app.warning)
+    failed=json.loads(app.get('plotly_chart')[0].proto.spec)
+    assert any(trace['type']=='candlestick' for trace in failed['data'])
+    assert app.session_state['edge_market_records'][('ES=F','latest')]['market']['timestamp']==original_stamp
+    assert app.session_state['edge_archive_analysis'][1]['net']==net
+    monkeypatch.setattr(M,'fetch_market',market);price[0]=6055.
+    next(button for button in app.button if button.label=='Rileggi candele e prezzo').click().run(timeout=20)
+    assert not app.exception and not app.error and checks==['0DTE'] and len(requests)==3
+    assert not any('non aggiornati' in warning.value for warning in app.warning)
+    assert app.session_state['edge_market_records'][('ES=F','latest')]['market']['price']==6055.
     next(button for button in app.button if button.label=='Esci da Edge').click().run(timeout=20)
     assert not app.exception and 'edge_market_records' not in app.session_state
 

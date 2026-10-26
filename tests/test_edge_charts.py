@@ -103,6 +103,7 @@ def test_missing_candles_are_explicit_and_no_fake_time_series_is_added():
     assert all(trace.type!='candlestick' for trace in figure.data)
     assert len(figure.data)==3 and any(a.text=='Candele non disponibili' for a in figure.layout.annotations)
     assert figure.layout.yaxis.range==figure.layout.yaxis2.range
+    assert figure.layout.xaxis.showticklabels is False and figure.layout.xaxis.title.text is None
 
 
 def test_italian_axis_distinguishes_summer_and_winter_repeated_hour():

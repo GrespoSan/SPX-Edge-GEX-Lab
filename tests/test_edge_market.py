@@ -78,6 +78,66 @@ def test_provider_errors_never_use_response_body_or_old_price_as_fresh(status):
     assert 'PRIVATE' not in str(error.value)
 
 
+@pytest.mark.parametrize('failure',['blocked','timeout','invalid','wrong_symbol','no_candles'])
+def test_secondary_endpoint_recovers_closed_candles_without_auth_or_cookie_reuse(failure):
+    requests=[]
+    def handler(request):
+        requests.append(request)
+        assert request.method=='GET' and not request.content
+        assert 'authorization' not in request.headers and 'apikey' not in request.headers
+        assert 'cookie' not in request.headers
+        if request.url.host=='query1.finance.yahoo.com':
+            if failure=='timeout':
+                raise httpx.ReadTimeout('PRIVATE_NETWORK_DETAIL',request=request)
+            if failure=='invalid':
+                return httpx.Response(200,text='PRIVATE_INVALID_JSON',headers={'Set-Cookie':'session=private'})
+            payload=body()
+            if failure=='wrong_symbol':
+                payload['chart']['result'][0]['meta']['symbol']='WRONG'
+            if failure=='no_candles':
+                payload['chart']['result'][0]['timestamp']=[]
+            return httpx.Response(429,text='PRIVATE_RESPONSE',headers={'Set-Cookie':'session=private'}) if failure=='blocked' else httpx.Response(200,json=payload)
+        assert request.url.host=='query2.finance.yahoo.com'
+        return httpx.Response(200,json=body())
+    result=fetch_market('ES=F',now=NOW,transport=httpx.MockTransport(handler))
+    assert len(requests)==2 and result['price']==7720 and len(result['candles'])==2
+    assert requests[0].url.params==requests[1].url.params
+    assert requests[0].url.path==requests[1].url.path
+
+
+def test_failed_endpoints_report_safe_causes_without_network_or_response_secrets():
+    def handler(request):
+        if request.url.host=='query1.finance.yahoo.com':
+            return httpx.Response(429,text='PRIVATE_RESPONSE')
+        raise httpx.ConnectError('PRIVATE_NETWORK_DETAIL',request=request)
+    with pytest.raises(MarketUnavailable) as error:
+        fetch_market('ES=F',now=NOW,transport=httpx.MockTransport(handler))
+    assert 'HTTP 429' in str(error.value) and 'connessione non riuscita' in str(error.value)
+    assert 'PRIVATE' not in str(error.value)
+
+
+def test_quote_without_candles_is_preserved_with_original_time_if_secondary_fails():
+    payload=body();payload['chart']['result'][0]['timestamp']=[]
+    result=fetch_market('ES=F',now=NOW,transport=httpx.MockTransport(
+        lambda request:httpx.Response(200,json=payload) if request.url.host=='query1.finance.yahoo.com' else httpx.Response(503)))
+    assert result['candles'].empty and result['price']==7720
+    assert datetime.fromisoformat(result['timestamp']).timestamp()==NOW-5
+
+
+def test_historical_fallback_requests_same_day_and_never_substitutes_todays_prices():
+    from datetime import date
+    requests=[]
+    def handler(request):
+        requests.append(request)
+        if request.url.host=='query1.finance.yahoo.com':
+            return httpx.Response(503)
+        return httpx.Response(200,json=body())
+    with pytest.raises(MarketUnavailable):
+        fetch_market('ES=F',day=date(2026,10,22),now=NOW,transport=httpx.MockTransport(handler))
+    assert len(requests)==2 and requests[0].url.params==requests[1].url.params
+    assert 'range' not in requests[1].url.params
+
+
 def test_unapproved_instrument_is_rejected_before_request():
     with pytest.raises(MarketUnavailable):
         fetch_market('http://other.test',transport=httpx.MockTransport(lambda r:pytest.fail('Unexpected request')))

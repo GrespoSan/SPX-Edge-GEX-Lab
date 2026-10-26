@@ -38,6 +38,20 @@ lo segnala. Non vengono inventate candele o spacciato lo spot della fotografia p
 prezzo corrente. La demo sintetica non richiede quotazioni esterne e mostra il
 profilo di test con un pannello candele esplicitamente privo di dati reali.
 
+La lettura prova query1 e, se fallisce o non fornisce candele, query2. Si tratta
+di due endpoint Yahoo, non di due fonti indipendenti: possono essere indisponibili
+entrambi. Ogni tentativo usa un client separato, solo GET, stesso ticker/periodo,
+timeout limitato, TLS, nessun redirect e risposta massima 2 MiB. Un fallback
+storico non sostituisce mai la giornata selezionata con dati odierni.
+
+Se un refresh fallisce dopo una lettura riuscita nella stessa sessione e per lo
+stesso ticker/periodo, restano visibili le ultime candele con un avviso esplicito
+di mancato aggiornamento. Il loro timestamp originale resta invariato. Il
+fallimento riduce la cache del tentativo a 30 secondi anziche' bloccare un errore
+storico per un'ora; il pulsante forza subito una nuova lettura. Senza dati in
+cache il pannello mostra la causa sicura dell'errore e nasconde l'asse temporale
+vuoto, evitando numeri privi di significato. Logout elimina anche questi dati.
+
 ## Compatibilita' con gli aggiornamenti esistenti
 
 La modifica parte da main af92f6e e conserva login prima dei controlli, 0DTE
@@ -65,3 +79,13 @@ su Python 3.12 e 3.14. Verificato in Chromium il rendering della figura con dati
 esplicitamente simulati: candele leggibili, scale iniziali allineate, range dei
 due assi prezzi ancora identici dopo uno zoom Plotly. Questa verifica locale
 non attesta la disponibilita' delle quotazioni o l'aggiornamento online.
+
+Resilienza lettura del 26/10/2026: 376 test superati e 1 test reale locale
+saltato su Python 3.12 e 3.14. Testati con trasporti simulati fallback HTTP,
+timeout, risposte invalide, ticker errato, quote senza candele, assenza di
+cookie/credenziali e rispetto della giornata storica; l'interfaccia mantiene
+timestamp e calcolo GEX durante un errore e riprende dopo il successivo successo.
+Verificato in Chromium anche il pannello di errore simulato senza asse tempo
+numerico. Le prove dirette del runner ai due endpoint falliscono al proxy:
+la causa specifica osservata nel deploy non e' deducibile dallo screenshot e
+il recupero delle candele reali online non e' ancora verificato.

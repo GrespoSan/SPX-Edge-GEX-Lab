@@ -9,6 +9,7 @@ import httpx
 import pandas as pd
 
 SYMBOLS = {'ES=F':'ES%3DF', '^GSPC':'%5EGSPC', '^NDX':'%5ENDX'}
+HOSTS = ('query1.finance.yahoo.com', 'query2.finance.yahoo.com')
 
 
 class MarketUnavailable(ValueError):
@@ -90,23 +91,37 @@ def fetch_market(symbol, *, day=None, transport=None, now=None):
         end = datetime.combine(day+timedelta(days=1),day_time.min,ZoneInfo('Europe/Rome'))
         params = {'period1':int(start.timestamp()),'period2':int(min(end.timestamp(),current)),
                   'interval':'5m','includePrePost':'true'}
-    try:
-        with httpx.Client(timeout=httpx.Timeout(6,connect=3),follow_redirects=False,
-                          transport=transport,headers={'User-Agent':'SPX-Edge-GEX-Lab/1.0'}) as client:
-            with client.stream('GET','https://query1.finance.yahoo.com/v8/finance/chart/'+SYMBOLS[symbol],
-                               params=params) as response:
-                if response.status_code != 200:
-                    raise MarketUnavailable('Yahoo non rende disponibile la quotazione (HTTP '+str(response.status_code)+').')
-                raw = bytearray()
-                for chunk in response.iter_bytes():
-                    raw.extend(chunk)
-                    if len(raw) > 2*1024*1024:
-                        raise MarketUnavailable('Risposta quotazioni troppo grande.')
-                return parse_market(json.loads(raw),symbol,day=day,now=current)
-    except httpx.HTTPError:
-        raise MarketUnavailable('Fonte prezzi temporaneamente non raggiungibile.') from None
-    except (ValueError,TypeError) as error:
-        if isinstance(error,MarketUnavailable):
-            raise
-        raise MarketUnavailable('Risposta della fonte prezzi non valida.') from None
+    failures = []
+    quote_only = None
+    # Independent clients prevent cookies from the first endpoint being sent
+    # to the second. Only the ticker and identical period are requested.
+    for host in HOSTS:
+        try:
+            with httpx.Client(timeout=httpx.Timeout(6,connect=3),follow_redirects=False,
+                              transport=transport,headers={
+                                  'User-Agent':'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
+                                  'Accept':'application/json'}) as client:
+                with client.stream('GET','https://'+host+'/v8/finance/chart/'+SYMBOLS[symbol],
+                                   params=params) as response:
+                    if response.status_code != 200:
+                        raise MarketUnavailable('HTTP '+str(response.status_code))
+                    raw = bytearray()
+                    for chunk in response.iter_bytes():
+                        raw.extend(chunk)
+                        if len(raw) > 2*1024*1024:
+                            raise MarketUnavailable('Risposta quotazioni troppo grande.')
+                    market = parse_market(json.loads(raw),symbol,day=day,now=current)
+                    if not market['candles'].empty:
+                        return market
+                    quote_only = market
+        except httpx.TimeoutException:
+            failures.append('tempo di risposta scaduto')
+        except httpx.HTTPError:
+            failures.append('connessione non riuscita')
+        except (ValueError,TypeError) as error:
+            failures.append(str(error) if isinstance(error,MarketUnavailable) else 'risposta non valida')
+    if quote_only is not None:
+        return quote_only
+    details = '; '.join(f'{index}: {reason}' for index,reason in enumerate(failures,1))
+    raise MarketUnavailable('Lettura Yahoo non riuscita sui due endpoint ('+details+').') from None
 
