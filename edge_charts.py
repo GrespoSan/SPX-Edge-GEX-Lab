@@ -96,7 +96,7 @@ def candles_gex_figure(result, shift=0., market=None, *, full=False, empty_messa
     figure.update_xaxes(title='Ora italiana · chiusura candela' if candles is not None and not candles.empty else None,
                         rangeslider_visible=False,row=1,col=1)
     figure.update_xaxes(title=f"GEX {result['symbol']} · miliardi USD/1%",zeroline=True,row=1,col=2)
-    figure.update_layout(height=620,barmode='relative',margin=dict(t=105,b=85,l=35,r=35),
+    figure.update_layout(height=760,barmode='relative',margin=dict(t=105,b=85,l=35,r=35),
                          legend=dict(orientation='h',y=-.16,x=.5,xanchor='center'),hovermode='closest',
                          uirevision=f"price-focus-v2/{result.get('sha256','')}/{shift}/{full}")
     return figure

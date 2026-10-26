@@ -119,3 +119,10 @@ barre aperte, giornata storica, fallback e cache pubblica anche degli errori.
 La prova diretta yfinance del runner non ottiene quotazioni utilizzabili; il
 recupero nel deploy Edge resta da verificare, anche se il replay APP SPX mostra
 candele. Un blocco Yahoo puo' dipendere dal server ed essere diverso fra app.
+
+Altezza del 26/10/2026: grafico portato da 620 a 760 pixel, mantenendo lo stesso
+intervallo prezzi e l'allineamento dei due pannelli. Il grafico e' circa il 23%
+piu' alto: piu' spazio per candele e barre senza aggiungere strike o allargare
+la scala. Nove test grafici superati e rendering locale controllato in Chromium
+con dati simulati. Lo screenshot successivo del proprietario mostra le
+candele reali anche in Edge dopo il cambio del lettore pubblico.
