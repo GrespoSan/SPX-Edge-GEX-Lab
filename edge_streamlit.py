@@ -19,7 +19,7 @@ from edge_archive import login_reader, renew_reader, latest_snapshot, download_s
 from edge_verification import verify_snapshot
 from edge_futures import BasisUnavailable, parse_basis, rounded_basis
 from edge_shared_basis import read_shared_basis
-from edge_market import MarketUnavailable, fetch_market
+from edge_market import MarketUnavailable, cached_market
 from edge_charts import candles_gex_figure
 
 ROOT = Path(__file__).resolve().parent
@@ -212,7 +212,12 @@ def chart_market(result, conversion, target, synthetic, historical):
         ttl = 30
     if refresh or record['at'] is None or current-record['at']>=ttl:
         try:
-            record.update(market=fetch_market(symbol,day=day),error='')
+            if refresh:
+                cached_market.clear(symbol,day)
+            market,error = cached_market(symbol,day)
+            if market is None:
+                raise MarketUnavailable(error)
+            record.update(market=market,error='')
         except MarketUnavailable as error:
             record['error'] = str(error)
         record['at'] = current
@@ -234,6 +239,7 @@ def chart_market(result, conversion, target, synthetic, historical):
         st.warning('Candele e fotografia riguardano giornate diverse: i livelli restano quelli della fotografia selezionata.')
     delay = market['delay_minutes']
     st.caption(f'Ritardo dichiarato dalla fonte: {delay:g} min.' if delay is not None else 'Ritardo non dichiarato dalla fonte; dati senza garanzia di tempo reale.')
+    st.caption('Lettura prezzi pubblici condivisa per 5 minuti. «Rileggi candele e prezzo» forza un nuovo tentativo.')
     return market, None
 
 

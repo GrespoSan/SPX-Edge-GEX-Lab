@@ -2,14 +2,21 @@
 from datetime import datetime, timezone, timedelta, time as day_time
 import json
 import math
+from pathlib import Path
+import tempfile
 import time
 from zoneinfo import ZoneInfo
 
 import httpx
 import pandas as pd
+import streamlit as st
+import yfinance as yf
 
 SYMBOLS = {'ES=F':'ES%3DF', '^GSPC':'%5EGSPC', '^NDX':'%5ENDX'}
 HOSTS = ('query1.finance.yahoo.com', 'query2.finance.yahoo.com')
+# Only Yahoo timezone/cookie metadata, never private archive data. Use writable
+# temporary storage in cloud runners as well as Community Cloud.
+yf.set_tz_cache_location(str(Path(tempfile.gettempdir()) / 'spx-edge-yfinance'))
 
 
 class MarketUnavailable(ValueError):
@@ -78,6 +85,54 @@ def parse_market(body, symbol, *, day=None, now=None):
         raise MarketUnavailable('Quotazione non disponibile o non riconoscibile dalla fonte.') from None
 
 
+def _yfinance_market(symbol, *, day, now):
+    """Read closed OHLC through the same public library used by APP SPX."""
+    options = {'interval':'5m','auto_adjust':False,'progress':False,
+               'prepost':True,'threads':False,'ignore_tz':False,'timeout':6}
+    if day is None:
+        options['period'] = '5d'
+    else:
+        options.update(start=(day-timedelta(days=1)).isoformat(),
+                       end=(day+timedelta(days=2)).isoformat())
+    try:
+        raw = yf.download(symbol, **options)
+    except Exception:
+        # Third-party network errors must not echo cookies/response contents.
+        raise MarketUnavailable('yfinance non ha restituito le candele.') from None
+    if not isinstance(raw,pd.DataFrame) or raw.empty or len(raw)>10000:
+        raise MarketUnavailable('Candele yfinance assenti o non valide.')
+    if isinstance(raw.columns,pd.MultiIndex):
+        ticker_level = next((level for level in range(raw.columns.nlevels)
+                             if symbol in raw.columns.get_level_values(level)),None)
+        if ticker_level is None:
+            raise MarketUnavailable('Strumento yfinance diverso da quello richiesto.')
+        raw = raw.xs(symbol,axis=1,level=ticker_level)
+    need = ('Open','High','Low','Close')
+    if (isinstance(raw.columns,pd.MultiIndex) or not isinstance(raw.index,pd.DatetimeIndex) or
+            raw.index.tz is None or raw.index.hasnans or
+            raw.columns.duplicated().any() or any(key not in raw for key in need)):
+        raise MarketUnavailable('OHLC o fuso orario yfinance non validi.')
+    # Reuse all validation of finite prices, completed bars, original times,
+    # and strict historical-day filtering; no metadata quote request is needed.
+    payload = {'chart':{'error':None,'result':[{
+        'meta':{'symbol':symbol},
+        'timestamp':[stamp.timestamp() for stamp in raw.index],
+        'indicators':{'quote':[{key.lower():pd.to_numeric(raw[key],errors='coerce').tolist()
+                                for key in need}]}}]}}
+    result = parse_market(payload,symbol,day=day,now=now)
+    result['reader'] = 'yfinance'
+    return result
+
+
+@st.cache_data(ttl=300,max_entries=32,show_spinner=False)
+def cached_market(symbol, day):
+    """Shared public OHLC only; failures also cool down repeated server reads."""
+    try:
+        return fetch_market(symbol,day=day), ''
+    except MarketUnavailable as error:
+        return None, str(error)
+
+
 def fetch_market(symbol, *, day=None, transport=None, now=None):
     if symbol not in SYMBOLS:
         raise MarketUnavailable('Strumento di mercato non supportato.')
@@ -91,6 +146,12 @@ def fetch_market(symbol, *, day=None, transport=None, now=None):
         end = datetime.combine(day+timedelta(days=1),day_time.min,ZoneInfo('Europe/Rome'))
         params = {'period1':int(start.timestamp()),'period2':int(min(end.timestamp(),current)),
                   'interval':'5m','includePrePost':'true'}
+    # Supplying a transport is the isolated HTTP diagnostic/test path.
+    if transport is None:
+        try:
+            return _yfinance_market(symbol,day=day,now=current)
+        except MarketUnavailable:
+            pass
     failures = []
     quote_only = None
     # Independent clients prevent cookies from the first endpoint being sent

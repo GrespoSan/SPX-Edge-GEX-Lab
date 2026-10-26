@@ -24,9 +24,12 @@ ROOT = Path(__file__).resolve().parents[1]
 
 @pytest.fixture(autouse=True)
 def no_external_quotes(monkeypatch):
+    M.cached_market.clear()
     def unavailable(*args,**kwargs):
         raise M.MarketUnavailable('No live market requests in isolated tests.')
     monkeypatch.setattr(M,'fetch_market',unavailable)
+    yield
+    M.cached_market.clear()
 
 
 def jwt(uid=UID, role='authenticated', expiry=NOW+3600):

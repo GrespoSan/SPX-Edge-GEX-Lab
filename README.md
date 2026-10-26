@@ -54,7 +54,7 @@ dall'interfaccia pubblica.
 
 Per fotografie SPX reali la vista iniziale e' Future ES (equivalente). Il
 differenziale viene letto dai metadati del file privato `mt4/latest.csv` gia'
-pubblicato dal sistema esistente. Edge non richiama il calcolo Serafini o Yahoo:
+pubblicato dal sistema esistente. Per questa conversione Edge non richiama il calcolo Serafini o Yahoo:
 arrotonda il valore pubblicato al punto intero e lo somma ai soli prezzi.
 GEX, regime e selezione dei contratti mantengono il motore Edge indipendente.
 
