@@ -8,6 +8,13 @@ NET rosa. L'asse orizzontale del profilo resta GEX SPX in miliardi USD/1%.
 
 Wall, flip, prezzo della fotografia e ultima quotazione disponibile hanno guide
 orizzontali sui due pannelli. Zoom operativo e Vista completa restano disponibili.
+Lo zoom operativo segue l'intervallo delle candele e l'ultimo prezzo disponibile,
+con margine e almeno 80 punti di altezza. Include spot/wall/flip entro 100 punti
+da tale intervallo; i livelli piu' lontani restano indicati sopra il grafico e
+nella Vista completa. Senza candele o quotazione si centra sullo spot della
+fotografia. Anche la scala orizzontale GEX segue gli strike inizialmente visibili:
+barre lontane non schiacciano quelle vicine al prezzo. Tutti i dati delle tracce
+restano presenti e la Vista completa mostra l'intero profilo.
 L'offset ES si applica ai soli strike/livelli SPX: le candele ES=F sono gia' prezzi
 future e non vengono traslate una seconda volta. Nessun prezzo di mercato entra
 in analyze, verify_snapshot o nei calcoli del motore Edge.
@@ -52,3 +59,9 @@ mai fotografie, livelli GEX o credenziali private.
 Verifica del 25/10/2026: 365 test superati e 1 test reale locale saltato sia su
 Python 3.12 sia su 3.14. Health HTTP e controllo WebSocket locale con demo
 sintetica riusciti. Non e' una verifica browser o del provider reale online.
+
+Correzione zoom del 26/10/2026: 368 test superati e 1 test reale locale saltato
+su Python 3.12 e 3.14. Verificato in Chromium il rendering della figura con dati
+esplicitamente simulati: candele leggibili, scale iniziali allineate, range dei
+due assi prezzi ancora identici dopo uno zoom Plotly. Questa verifica locale
+non attesta la disponibilita' delle quotazioni o l'aggiornamento online.

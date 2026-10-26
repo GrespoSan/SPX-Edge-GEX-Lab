@@ -59,6 +59,45 @@ def test_full_view_contains_all_strikes_and_candle_extremes_on_both_panels():
     assert figure.layout.yaxis2.range==(low,high)
 
 
+def test_quiet_session_fills_price_window_without_showing_entire_strike_universe():
+    result,market=inputs()
+    result['rows']=pd.concat([result['rows'],pd.DataFrame({
+        'strike':[5400.,6600.],'call_gex':[100e9,100e9],
+        'put_gex':[-90e9,-90e9],'net_gex':[10e9,10e9]})],ignore_index=True)
+    zoom=candles_gex_figure(result,40,market)
+    low,high=zoom.layout.yaxis.range
+    assert 5980<low<6020 and 6060<high<6100
+    assert high-low<150
+    assert zoom.layout.xaxis2.range==pytest.approx((-3.3,3.3))
+    # Out-of-window bars are retained with their actual values for full view/pan.
+    call=next(trace for trace in zoom.data if trace.name=='Call GEX')
+    assert list(call.x)[-2:]==[100,100]
+    full=candles_gex_figure(result,40,market,full=True)
+    assert full.layout.yaxis.range[0]<5440 and full.layout.yaxis.range[1]>6640
+    assert full.layout.xaxis2.range==pytest.approx((-110,110))
+
+
+def test_far_wall_does_not_compress_candles_but_remains_identified():
+    result,market=inputs();result['call_wall']=6600
+    figure=candles_gex_figure(result,40,market)
+    low,high=figure.layout.yaxis.range
+    assert high-low<150 and low<6028 and high>6042
+    assert any(a.text=='Call Wall: 6,640.00' for a in figure.layout.annotations)
+    assert any(s.y0==6640 for s in figure.layout.shapes)
+    assert candles_gex_figure(result,40,market,full=True).layout.yaxis.range[1]>6640
+
+
+def test_candle_extremes_stay_visible_even_when_quote_has_moved_far_from_photo():
+    result,market=inputs()
+    market['candles'][['open','high','low','close']]+=500
+    market['price']+=500
+    figure=candles_gex_figure(result,40,market)
+    low,high=figure.layout.yaxis.range
+    assert low<6528<6542<high and high-low<=100
+    assert figure.layout.yaxis2.range==(low,high)
+    assert all(np.isfinite(figure.layout.xaxis2.range))
+
+
 def test_missing_candles_are_explicit_and_no_fake_time_series_is_added():
     result,_=inputs();figure=candles_gex_figure(result,40,None,empty_message='Candele non disponibili')
     assert all(trace.type!='candlestick' for trace in figure.data)

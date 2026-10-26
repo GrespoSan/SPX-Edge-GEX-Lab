@@ -271,6 +271,7 @@ def render_result(result, synthetic=False, basis_target=None, archive_context=No
         chart.update_yaxes(title="Prezzo ES" if translated else "Prezzo " + result['symbol'],row=1,col=1)
         st.caption(f"Profilo {', '.join(result['expiries'])} · {('0DTE' if len(result['expiries']) == 1 else 'scadenze multiple')} · "
                    "prezzi allineati verticalmente; Call verdi, Put rosse, NET rosa. Il prezzo delle candele non modifica i calcoli GEX.")
+        st.caption('Zoom operativo: candele e livelli vicini al prezzo. Vista completa: tutti gli strike del profilo. Puoi ingrandire una zona trascinando sul grafico.')
         st.plotly_chart(chart, width="stretch",key="edge_candles_gex")
         exported = frame.copy()
         if translated:

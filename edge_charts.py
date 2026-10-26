@@ -10,6 +10,28 @@ NET = '#f4a2b3'
 FLIP = '#e7ae4e'
 
 
+def _price_limits(result, shift, market, levels, full):
+    """Frame candles and nearby references, not the entire strike universe."""
+    photo = result['spot'] + shift
+    candles = market['candles'] if market is not None else None
+    anchor = market['price'] if market is not None else photo
+    prices = [anchor]
+    if candles is not None and not candles.empty:
+        prices += [float(candles.low.min()), float(candles.high.max())]
+    references = [photo] + [value for _, value, _ in levels]
+    if full:
+        prices += references + list(result['rows'].strike + shift)
+    else:
+        # Distant walls remain in the header and in Vista completa. They must
+        # not compress a quiet price session into a few pixels.
+        low, high = min(prices), max(prices)
+        prices += [value for value in references if low - 100 <= value <= high + 100]
+    center = (min(prices) + max(prices)) / 2
+    height = max(prices) - min(prices)
+    span = max(40., height / 2 + max(10., height * .08))
+    return [center - span, center + span]
+
+
 def candles_gex_figure(result, shift=0., market=None, *, full=False, empty_message=None):
     """Prices rise vertically on both panels; candles left, signed GEX right."""
     candles = market['candles'] if market is not None else None
@@ -59,24 +81,19 @@ def candles_gex_figure(result, shift=0., market=None, *, full=False, empty_messa
             figure.add_hline(y=market['price'],line_color='#facc15',line_width=1,row=1,col=column,
                              exclude_empty_subplots=False)
     figure.add_vline(x=0,line_color='#738198',line_width=1,row=1,col=2)
-    important = [value for _,value,_ in levels]+[photo]
-    if market is not None:
-        important.append(market['price'])
-    if full:
-        important += list(frame.strike+shift)
-        if candles is not None and not candles.empty:
-            important += [float(candles.low.min()),float(candles.high.max())]
-        pad = max(10,(max(important)-min(important))*.04)
-        limits = [min(important)-pad,max(important)+pad]
-    else:
-        span = max(200.,max(abs(value-photo)+25 for value in important))
-        limits = [photo-span,photo+span]
+    limits = _price_limits(result, shift, market, levels, full)
+    # Plotly's autorange includes off-screen strike bars. Scale GEX to the
+    # initial visible prices while retaining every original trace value.
+    visible = frame if full else frame.loc[(frame.strike+shift).between(*limits)]
+    exposures = [0.] + [float(value)/1e9 for key in ('call_gex','put_gex','net_gex') for value in visible[key]]
+    extent = max(abs(min(exposures)), abs(max(exposures)), .01) * 1.1
+    figure.update_xaxes(range=[-extent,extent],row=1,col=2)
     # Explicit equal ranges plus matches keep zoom/pan and initial view aligned.
-    figure.update_yaxes(range=limits,row=1,col=1)
-    figure.update_yaxes(range=limits,matches='y',showticklabels=True,row=1,col=2)
+    figure.update_yaxes(range=limits,nticks=12,row=1,col=1)
+    figure.update_yaxes(range=limits,matches='y',showticklabels=True,nticks=12,row=1,col=2)
     figure.update_xaxes(title='Ora italiana · chiusura candela',rangeslider_visible=False,row=1,col=1)
     figure.update_xaxes(title=f"GEX {result['symbol']} · miliardi USD/1%",zeroline=True,row=1,col=2)
     figure.update_layout(height=620,barmode='relative',margin=dict(t=105,b=85,l=35,r=35),
                          legend=dict(orientation='h',y=-.16,x=.5,xanchor='center'),hovermode='closest',
-                         uirevision=f"{result.get('sha256','')}/{shift}/{full}")
+                         uirevision=f"price-focus-v2/{result.get('sha256','')}/{shift}/{full}")
     return figure
