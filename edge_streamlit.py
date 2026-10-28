@@ -410,7 +410,7 @@ def automatic_archive(mode):
         except StorageReadError as error:
             st.error(str(error))
             return
-    force = st.button('Aggiorna ora', key='edge_archive_refresh')
+    force = st.button('Aggiorna fotografia', key='edge_archive_refresh', help='Rilegge la fotografia CBOE disponibile senza alterare i dati o i calcoli.')
     now = time.monotonic()
     fetched = st.session_state.get('edge_archive_fetched', 0)
     try:
@@ -432,11 +432,33 @@ def automatic_archive(mode):
                 st.session_state['edge_archive_selection'] = reference.path
                 st.session_state['edge_archive_fetched'] = now
         reference = st.session_state['edge_archive_ref']
-        if archive_mode == 'Ultima disponibile':
-            st.caption('Aggiornamento automatico ogni 2 minuti mentre la pagina è aperta; viene letta l’ultima fotografia disponibile.')
-        else:
-            st.caption('Fotografia storica fissata: non passa automaticamente a quella più recente.')
-        st.caption('File archiviato: ' + reference.path)
+        # Readable selection summary: source CBOE clock is distinct from actual download.
+        file_name = reference.path.rsplit('/', 1)[-1]
+        try:
+            source_stamp = datetime.strptime(file_name[9:24], '%Y%m%d_%H%M%S').replace(tzinfo=ZoneInfo('UTC'))
+            source_rome = source_stamp.astimezone(ZoneInfo('Europe/Rome'))
+            selected_day_label = source_rome.strftime('%d/%m/%Y')
+            source_time_label = source_rome.strftime('%H:%M:%S')
+        except (ValueError, IndexError):
+            selected_day_label = 'Non disponibile'
+            source_time_label = 'Non disponibile'
+        st.markdown('#### Fotografia in analisi')
+        overview = st.columns([1.2, 1, 1.8])
+        overview[0].metric('Data del dato CBOE', selected_day_label)
+        overview[1].metric('Ora dato CBOE · Roma', source_time_label)
+        overview[2].metric('Selezione', 'Ultima disponibile' if archive_mode == 'Ultima disponibile' else 'Storica selezionata')
+        st.caption(
+            'L’orario mostrato si riferisce al dato CBOE (interpretato come UTC), '
+            'non all’effettivo download. Quest’ultimo viene verificato separatamente nei registri Serafini.'
+        )
+        with st.expander('Dettagli fotografia e aggiornamento', expanded=False):
+            st.code(file_name, language=None)
+            st.caption('Percorso archivio: ' + reference.path)
+            st.caption(
+                'Controllo della fotografia più recente ogni 2 minuti a pagina aperta.'
+                if archive_mode == 'Ultima disponibile'
+                else 'Fotografia storica fissata: non viene sostituita automaticamente.'
+            )
         raw = st.session_state['edge_archive_raw']
         analysis_key = (hashlib.sha256(raw).hexdigest(), mode)
         cached = st.session_state.get('edge_archive_analysis')
@@ -449,7 +471,7 @@ def automatic_archive(mode):
             cached = (analysis_key, result, report)
             st.session_state['edge_archive_analysis'] = cached
         _, result, report = cached
-        st.success(f"Verifica aritmetica superata: {report['contracts_cross_checked']} contratti, NET e Gross GEX riconciliati.")
+        st.caption(f"✓ Verifica aritmetica superata · {report['contracts_cross_checked']} contratti · NET e Gross GEX riconciliati")
         target = datetime.strptime(reference.path.rsplit('/', 1)[-1][9:17], '%Y%m%d').date()
         conversion = render_result(result, basis_target=target, archive_context=(project, key, session),
                                    historical=archive_mode=='Seleziona fotografia storica')
