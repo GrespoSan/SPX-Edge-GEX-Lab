@@ -74,7 +74,18 @@ def render(result, offset, selected_day, archive_context=None):
     if result.get("mode")!="0DTE":
         return
     with st.expander("GEX Peak Monitor · studio sperimentale",expanded=False):
-        st.caption("Massimi e minimi della curva teorica Edge: NON sono Call Wall/Put Wall e non costituiscono segnali.")
+        st.markdown(
+            "**A cosa serve questo monitor?** Vogliamo verificare se i massimi e i minimi "
+            "della curva teorica GEX individuano *in anticipo* zone nelle quali il prezzo ES "
+            "tende a rallentare, respingere un livello o invertire, anche in assenza di "
+            "un Call Wall/Put Wall evidente.\\n\\n"
+            "**Come lo verifichiamo:** registriamo i picchi della fotografia CBOE e la sua "
+            "ora effettiva di acquisizione; poi confrontiamo soltanto le candele ES successive "
+            "e, su molte osservazioni, i risultati rispetto a Call Wall, Put Wall e livelli "
+            "di controllo.\\n\\n"
+            "**Stato:** ricerca sperimentale; una coincidenza non prova capacità predittiva "
+            "e i picchi non sono segnali automatici di acquisto o vendita."
+        )
         if offset is None:
             st.warning("Differenziale ES−SPX non disponibile: studio dei prezzi ES non possibile.")
             return
