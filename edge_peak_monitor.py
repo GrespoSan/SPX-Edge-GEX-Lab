@@ -43,7 +43,9 @@ def forward_test(candles, acquisition, level, tolerance=5.0, bounce=10.0):
     distance=(after["low"]-level).clip(lower=0)+(level-after["high"]).clip(lower=0)
     touch=distance<=tolerance
     if not touch.any():
-        return {"status":"Non raggiunto in 3 ore","min_distance":float(distance.min())}
+        complete=after["time"].max()>=acquisition+timedelta(hours=3)
+        return {"status":"Non raggiunto in 3 ore" if complete else "Finestra incompleta: nessun contatto finora",
+                "min_distance":float(distance.min())}
     first=after.loc[touch].iloc[0]
     subsequent=after.loc[(after["time"]>=first["time"])&(after["time"]<=first["time"]+timedelta(minutes=30))]
     # No direction assumed from peak: examine both an upper and lower rejection.
@@ -54,6 +56,7 @@ def forward_test(candles, acquisition, level, tolerance=5.0, bounce=10.0):
     else:
         reversal=(subsequent["high"]>=level+bounce).any()
         breakout=(subsequent["low"]<=level-bounce).any()
+    complete_reaction=subsequent["time"].max()>=first["time"]+timedelta(minutes=30)
     if reversal and breakout:
         status="Ambiguo: entrambi i movimenti"
     elif reversal:
@@ -61,7 +64,7 @@ def forward_test(candles, acquisition, level, tolerance=5.0, bounce=10.0):
     elif breakout:
         status="Attraversamento"
     else:
-        status="Nessuna reazione di 10 punti confermata"
+        status="Nessuna reazione di 10 punti confermata" if complete_reaction else "30 minuti successivi non ancora disponibili"
     return {"status":status, "min_distance":float(distance.min()),
             "first_touch":first["time"].astimezone(ROME).strftime("%H:%M")}
 
