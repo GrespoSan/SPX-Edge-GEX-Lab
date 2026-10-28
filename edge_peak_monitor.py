@@ -3,12 +3,13 @@
 Only uses existing Edge outputs. The market comparison is conditional on an
 explicit independently verified acquisition clock, never the CBOE source timestamp.
 """
-from datetime import date, datetime, time, timedelta
+from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 import math
 import pandas as pd
 import streamlit as st
 from edge_market import cached_market
+from edge_archive import snapshot_acquisition
 
 ROME=ZoneInfo("Europe/Rome")
 
@@ -84,16 +85,21 @@ def render(result, offset, selected_day, archive_context=None):
         for c,p in zip(cols,peaks):
             c.metric(p["type"]+" · ES",f"{p['level']:,.2f}",f"{p['value']:+.2f} mld USD/1%",delta_color="off")
         st.caption("I picchi sono calcolati sulla fotografia selezionata, senza utilizzare prezzi successivi. L'ora CBOE non dimostra l'ora di effettiva disponibilità.")
-        st.markdown("**Verifica successiva sui prezzi ES (facoltativa)**")
-        clock=st.text_input("Ora verificata di acquisizione a Roma (HH:MM)",value="",placeholder="Es. 20:30",key="edge_peak_actual_download")
-        if not clock.strip():
-            st.info("Indica l'orario reale verificato nel registro Serafini per attivare il confronto con le candele successive.")
+        ref=st.session_state.get("edge_archive_ref") if archive_context else None
+        name=ref.path.rsplit("/",1)[-1] if ref else "file caricato manualmente"
+        st.markdown(f"**Fotografia analizzata:** `{name}`")
+        source_stamp=datetime.fromisoformat(result["timestamp"].replace("Z","+00:00"))
+        if source_stamp.tzinfo is not None:
+            st.caption(f"Ora del dato CBOE (interpretata come UTC): {source_stamp.astimezone(ROME):%d/%m/%Y %H:%M:%S} Roma")
+        when=None
+        if archive_context and ref:
+            project,key,session=archive_context
+            when=snapshot_acquisition(project,key,session,ref)
+        if when is None:
+            st.warning("Ora effettiva del download non verificabile nei registri Serafini: test successivo disabilitato. Il timestamp CBOE non è usato come sostituto.")
             return
-        try:
-            hh,mm=map(int,clock.strip().split(":"))
-            when=datetime.combine(selected_day,time(hh,mm),tzinfo=ROME)
-        except (ValueError,TypeError):
-            st.error("Orario non valido. Usare HH:MM.");return
+        st.success(f"Acquisizione verificata dal registro Serafini: {when:%d/%m/%Y %H:%M:%S} Roma")
+        st.markdown("**Verifica successiva sui prezzi ES**")
         now=datetime.now(ROME)
         if when>now:
             st.warning("Fotografia futura: nessun confronto possibile.");return
@@ -107,7 +113,7 @@ def render(result, offset, selected_day, archive_context=None):
         for p in peaks:
             t=forward_test(prices,when,p["level"])
             rows.append({"Fotografia":result["sha256"][:12], "Data":selected_day.isoformat(),
-                         "Ora Roma dichiarata":clock.strip(),"Picco":p["type"],
+                         "Download Roma verificato":when.isoformat(),"Picco":p["type"],
                          "Livello ES":round(p["level"],2),"GEX mld":round(p["value"],2),
                          "Distanza minima (punti)":None if t["min_distance"] is None else round(t["min_distance"],2),
                          "Primo contatto":t.get("first_touch","—"),"Esito":t["status"]})
