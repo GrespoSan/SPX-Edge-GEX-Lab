@@ -331,8 +331,20 @@ def render_result(result, synthetic=False, basis_target=None, archive_context=No
     else:
         st.info("Nessuno strike nella fascia del grafico; i totali includono comunque la catena selezionata.")
     st.caption("Grafico e wall: strike entro ±10% dallo spot. Totali e curva ipotetica: contratti selezionati acquisiti entro ±20%.")
+    # Peak Monitor is located next to the theoretical curve it studies.
+    if not synthetic and translated:
+        from edge_peak_monitor import render as render_peak_monitor
+        render_peak_monitor(result, offset, target, archive_context)
     with st.expander("Curva ipotetica e tutti i gamma flip"):
         curve = result["curve"]
+        if not curve.empty:
+            maximum = curve.loc[curve["net_gex"].idxmax()]
+            minimum = curve.loc[curve["net_gex"].idxmin()]
+            st.markdown(
+                f"**Curva teorica GEX {result['mode']}** · "
+                f"Max **{maximum['net_gex']/1e9:+.2f} mld** (ES {maximum['spot']+shift:,.2f}) · "
+                f"Min **{minimum['net_gex']/1e9:+.2f} mld** (ES {minimum['spot']+shift:,.2f})"
+            )
         chart = go.Figure(go.Scatter(x=curve["spot"] + shift, y=curve["net_gex"] / 1e9, mode="lines", name="NET GEX ipotetico"))
         chart.add_hline(y=0, line_dash="dot")
         chart.update_layout(xaxis_title="Prezzo ES equivalente" if translated else "Spot ipotetico " + result['symbol'], yaxis_title=f"GEX {result['symbol']} · miliardi USD/1%")
@@ -345,11 +357,6 @@ def render_result(result, synthetic=False, basis_target=None, archive_context=No
         st.write("Data OI inferita dalla sessione precedente, non pubblicata da CBOE:", result["oi_date"])
         st.code("SHA-256 file: " + result["sha256"] + "\nModello Edge: " + result["model_version"])
         st.caption("Motori Edge e Serafini separati. Nessuna scrittura Supabase, nessun invio MT4 e nessuna acquisizione CBOE live avviata dall'app.")
-    # Standalone research panel: derived solely from Edge theoretical curve.
-    # Never writes to Serafini, Supabase, or MT4.
-    if not synthetic and translated:
-        from edge_peak_monitor import render as render_peak_monitor
-        render_peak_monitor(result, offset, target, archive_context)
     return conversion
 
 
