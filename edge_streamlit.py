@@ -410,7 +410,7 @@ def automatic_archive(mode):
         except StorageReadError as error:
             st.error(str(error))
             return
-    force = st.button('Aggiorna fotografia', key='edge_archive_refresh', help='Rilegge la fotografia CBOE disponibile senza alterare i dati o i calcoli.')
+    force = False  # Aggiornamento automatico, senza pulsante manuale.
     now = time.monotonic()
     fetched = st.session_state.get('edge_archive_fetched', 0)
     try:
