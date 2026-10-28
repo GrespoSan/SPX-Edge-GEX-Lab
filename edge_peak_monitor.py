@@ -103,7 +103,7 @@ def render(result, offset, selected_day, archive_context=None):
                 when=snapshot_acquisition(project,key,session,ref)
                 st.session_state[cache_key]=(time.monotonic(),when)
         if when is None:
-            st.warning("Ora effettiva del download non verificabile nei registri Serafini: test successivo disabilitato. Il timestamp CBOE non è usato come sostituto.")
+            st.caption("Verifica dei prezzi successivi non disponibile: orario di acquisizione non confermato dal registro. La fotografia CBOE e i picchi GEX sono regolarmente disponibili.")
             return
         st.success(f"Acquisizione verificata dal registro Serafini: {when:%d/%m/%Y %H:%M:%S} Roma")
         st.markdown("**Verifica successiva sui prezzi ES**")
