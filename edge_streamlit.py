@@ -246,7 +246,7 @@ def chart_market(result, conversion, target, synthetic, historical):
 def render_result(result, synthetic=False, basis_target=None, archive_context=None, historical=False):
     if synthetic:
         st.caption("Risultati su esempio sintetico; nessuna verifica su dati reali.")
-    st.caption(f"{result['symbol']} | Valutazione Edge (Italia): {italian_time(result['valuation'])}")
+
     target = basis_target or datetime.fromisoformat(result['timestamp']).date()
     conversion = price_conversion(result, synthetic, target, archive_context)
     offset = conversion['offset']
