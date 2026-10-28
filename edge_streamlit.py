@@ -331,10 +331,6 @@ def render_result(result, synthetic=False, basis_target=None, archive_context=No
     else:
         st.info("Nessuno strike nella fascia del grafico; i totali includono comunque la catena selezionata.")
     st.caption("Grafico e wall: strike entro ±10% dallo spot. Totali e curva ipotetica: contratti selezionati acquisiti entro ±20%.")
-    # Peak Monitor is located next to the theoretical curve it studies.
-    if not synthetic and translated:
-        from edge_peak_monitor import render as render_peak_monitor
-        render_peak_monitor(result, offset, target, archive_context)
     with st.expander("Curva ipotetica e tutti i gamma flip"):
         curve = result["curve"]
         if not curve.empty:
@@ -350,6 +346,10 @@ def render_result(result, synthetic=False, basis_target=None, archive_context=No
         chart.update_layout(xaxis_title="Prezzo ES equivalente" if translated else "Spot ipotetico " + result['symbol'], yaxis_title=f"GEX {result['symbol']} · miliardi USD/1%")
         st.plotly_chart(chart, width="stretch")
         st.write("Attraversamenti dello zero" + suffix + ":", [price(value) for value in result['flips']] or "Nessun attraversamento nella finestra Edge")
+    # Peak Monitor is located next to the theoretical curve it studies.
+    if not synthetic and translated:
+        from edge_peak_monitor import render as render_peak_monitor
+        render_peak_monitor(result, offset, target, archive_context)
     with st.expander("Metodo Edge e provenienza"):
         st.write("Gamma Black–Scholes con r = q = 0; GEX = segno × gamma × OI × 100 × spot² × 0,01. Call positive e put negative sono assunzioni sulle posizioni, non dati osservati dei dealer.")
         st.write("Tempo residuo dal timestamp storico o dall'ultima chiusura secondo il motore Edge; mai dalla data odierna. Radice SPX/NDX: AM 09:30 New York; SPXW/NDXP: PM alla chiusura di sessione.")
