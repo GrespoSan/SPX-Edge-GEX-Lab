@@ -383,11 +383,22 @@ def automatic_archive(mode):
                 st.info('Nessuna fotografia SPX originale disponibile per questa data. Scegli un altro giorno.')
                 return
             names = {ref.path.rsplit('/', 1)[-1]: ref for ref in available}
+            def snapshot_display(name):
+                # Timestamp from the CBOE filename, interpreted as UTC like the
+                # Edge source timestamp. It is NOT the archive download time.
+                try:
+                    source_time=datetime.strptime(name[9:24],'%Y%m%d_%H%M%S').replace(tzinfo=ZoneInfo('UTC'))
+                    local=source_time.astimezone(ZoneInfo('Europe/Rome'))
+                    return f"{local:%H:%M} Roma (dato CBOE, NON download) · {name}"
+                except (ValueError,IndexError):
+                    return f"Orario non identificato · {name}"
             chosen = st.selectbox(
-                'Fotografia CBOE disponibile (orario riportato nel nome file)',
-                list(names), index=len(names)-1, key='edge_archive_selected_snapshot',
+                'Fotografia CBOE · orario del dato in Italia (NON del download)',
+                list(names), index=len(names)-1, format_func=snapshot_display,
+                key='edge_archive_selected_snapshot',
             )
             selected_reference = names[chosen]
+            st.caption('Esempio: 19:30 UTC del 28/10 equivale a 20:30 Roma. L’orario reale di acquisizione va verificato nel registro Serafini; il nome file non lo certifica.')
             st.caption('La fotografia è letta dal medesimo archivio privato di Serafini; i calcoli restano esclusivamente Edge.')
         except StorageReadError as error:
             st.error(str(error))
