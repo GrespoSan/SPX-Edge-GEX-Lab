@@ -345,6 +345,11 @@ def render_result(result, synthetic=False, basis_target=None, archive_context=No
         st.write("Data OI inferita dalla sessione precedente, non pubblicata da CBOE:", result["oi_date"])
         st.code("SHA-256 file: " + result["sha256"] + "\nModello Edge: " + result["model_version"])
         st.caption("Motori Edge e Serafini separati. Nessuna scrittura Supabase, nessun invio MT4 e nessuna acquisizione CBOE live avviata dall'app.")
+    # Standalone research panel: derived solely from Edge theoretical curve.
+    # Never writes to Serafini, Supabase, or MT4.
+    if not synthetic and translated:
+        from edge_peak_monitor import render as render_peak_monitor
+        render_peak_monitor(result, offset, target, archive_context)
     return conversion
 
 
