@@ -6,6 +6,7 @@ explicit independently verified acquisition clock, never the CBOE source timesta
 from datetime import date, datetime, timedelta
 from zoneinfo import ZoneInfo
 import math
+import time
 import pandas as pd
 import streamlit as st
 from edge_market import cached_market
@@ -94,7 +95,13 @@ def render(result, offset, selected_day, archive_context=None):
         when=None
         if archive_context and ref:
             project,key,session=archive_context
-            when=snapshot_acquisition(project,key,session,ref)
+            cache_key=("peak_acquisition",ref.path,session.user_id)
+            cached=st.session_state.get(cache_key)
+            if cached and time.monotonic()-cached[0]<300:
+                when=cached[1]
+            else:
+                when=snapshot_acquisition(project,key,session,ref)
+                st.session_state[cache_key]=(time.monotonic(),when)
         if when is None:
             st.warning("Ora effettiva del download non verificabile nei registri Serafini: test successivo disabilitato. Il timestamp CBOE non è usato come sostituto.")
             return
