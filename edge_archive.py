@@ -209,3 +209,42 @@ def snapshots_for_day(project_url, api_key, session, selected_day, *, transport=
                 continue
             found.append(SnapshotRef(prefix + '/' + name, str(row.get('updated_at') or '')))
     return sorted(found, key=lambda item: item.path)
+
+
+def snapshot_acquisition(project_url, api_key, session, snapshot, *, transport=None, now=None):
+    """Verified earliest download instant from existing Serafini archive logs.
+    Uses the already-authorized reader only; never assumes storage updated_at
+    or filename CBOE time is acquisition. Returns None if logs inaccessible.
+    """
+    from datetime import timezone
+    from zoneinfo import ZoneInfo
+    if not isinstance(snapshot, SnapshotRef):
+        return None
+    current=time.time() if now is None else now
+    if not isinstance(session, ReaderSession) or session.expires_at<=current+15:
+        return None
+    prefix=snapshot.path.split('/snapshots/')[0]+'/logs'
+    match=[]
+    try:
+        for rows in _entries(_project_url(project_url), api_key, session.access_token, prefix, transport):
+            for entry in rows:
+                name=str(entry.get('name',''))
+                if not name.endswith('.json') or '/' in name or '..' in name:
+                    continue
+                url=_project_url(project_url)+'/storage/v1/object/authenticated/spx-snapshots/'+prefix+'/'+name
+                try:
+                    raw=_download(url,{'apikey':api_key,'Authorization':'Bearer '+session.access_token},transport)
+                    record=json.loads(raw)
+                    if record.get('file')!=snapshot.path or record.get('status') not in ('NUOVO','INVARIATO'):
+                        continue
+                    timestamp=record.get('download_rome') or record.get('download_utc')
+                    if not timestamp:
+                        continue
+                    dt=datetime.fromisoformat(str(timestamp).replace('Z','+00:00'))
+                    if dt.tzinfo is not None:
+                        match.append(dt.astimezone(ZoneInfo('Europe/Rome')))
+                except (ValueError,TypeError,KeyError,StorageReadError):
+                    continue
+    except (StorageReadError,ValueError,TypeError):
+        return None
+    return min(match) if match else None
