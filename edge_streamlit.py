@@ -462,9 +462,9 @@ def automatic_archive(mode):
             acquisition_rome = acquisition_cache[2]
         st.markdown('#### Fotografia in analisi')
         overview = st.columns([1.1, 1.2, 1.2, 1.6])
-        overview[0].metric('Data fotografia', selected_day_label)
-        overview[1].metric('Acquisizione · Roma', acquisition_rome.strftime('%H:%M:%S') if acquisition_rome else 'Non verificata')
-        overview[2].metric('Ora dato CBOE · Roma', source_time_label)
+        overview[0].metric('Data rilevamento', acquisition_rome.strftime('%d/%m/%Y') if acquisition_rome else selected_day_label)
+        overview[1].metric('Ora rilevamento · Roma', acquisition_rome.strftime('%H:%M:%S') if acquisition_rome else 'Non verificata')
+        overview[2].metric('Ora del dato CBOE', source_time_label)
         overview[3].metric('Selezione', 'Ultimo rilevamento disponibile' if archive_mode == 'Ultimo rilevamento disponibile' else 'Storica selezionata')
         if acquisition_rome:
             st.caption(
