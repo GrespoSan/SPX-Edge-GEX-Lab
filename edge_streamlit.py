@@ -15,7 +15,7 @@ from streamlit.errors import StreamlitSecretNotFoundError
 
 from edge_clone_engine import MODES, analyze
 from edge_storage import StorageReadError
-from edge_archive import login_reader, renew_reader, latest_snapshot, download_snapshot, snapshots_for_day
+from edge_archive import login_reader, renew_reader, latest_snapshot, download_snapshot, snapshots_for_day, snapshot_acquisition
 from edge_verification import verify_snapshot
 from edge_futures import BasisUnavailable, parse_basis, rounded_basis
 from edge_shared_basis import read_shared_basis
@@ -450,15 +450,33 @@ def automatic_archive(mode):
         except (ValueError, IndexError):
             selected_day_label = 'Non disponibile'
             source_time_label = 'Non disponibile'
+        # The source timestamp and download clock are different concepts.
+        # The Serafini comparison labels 07:30 using the verified download log,
+        # not the CBOE timestamp encoded in the filename.
+        acquisition_cache_key = ('edge_acquisition', reference.path)
+        acquisition_cache = st.session_state.get('edge_archive_acquisition')
+        if acquisition_cache is None or acquisition_cache[0] != acquisition_cache_key or now - acquisition_cache[1] >= 300:
+            acquisition_rome = snapshot_acquisition(project, key, session, reference)
+            st.session_state['edge_archive_acquisition'] = (acquisition_cache_key, now, acquisition_rome)
+        else:
+            acquisition_rome = acquisition_cache[2]
         st.markdown('#### Fotografia in analisi')
-        overview = st.columns([1.2, 1, 1.8])
-        overview[0].metric('Data del dato CBOE', selected_day_label)
-        overview[1].metric('Ora dato CBOE · Roma', source_time_label)
-        overview[2].metric('Selezione', 'Ultimo rilevamento disponibile' if archive_mode == 'Ultimo rilevamento disponibile' else 'Storica selezionata')
-        st.caption(
-            'L’orario mostrato si riferisce al dato CBOE (interpretato come UTC), '
-            'non all’effettivo download. Quest’ultimo viene verificato separatamente nei registri Serafini.'
-        )
+        overview = st.columns([1.1, 1.2, 1.2, 1.6])
+        overview[0].metric('Data fotografia', selected_day_label)
+        overview[1].metric('Acquisizione · Roma', acquisition_rome.strftime('%H:%M:%S') if acquisition_rome else 'Non verificata')
+        overview[2].metric('Ora dato CBOE · Roma', source_time_label)
+        overview[3].metric('Selezione', 'Ultimo rilevamento disponibile' if archive_mode == 'Ultimo rilevamento disponibile' else 'Storica selezionata')
+        if acquisition_rome:
+            st.caption(
+                f'Acquisizione registrata il {acquisition_rome:%d/%m/%Y} alle {acquisition_rome:%H:%M:%S} Roma. '
+                'Il timestamp CBOE del file può essere precedente: non indica quando è stato scaricato.'
+            )
+        else:
+            st.caption(
+                'Il timestamp CBOE è l’ora del dato contenuta nel file, non quella del download. '
+                'L’orario di acquisizione non è verificabile con i registri accessibili a Edge; '
+                'non viene sostituito con l’ora CBOE.'
+            )
         with st.expander('Dettagli fotografia e aggiornamento', expanded=False):
             st.code(file_name, language=None)
             st.caption('Percorso archivio: ' + reference.path)
