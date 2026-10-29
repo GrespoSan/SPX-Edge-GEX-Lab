@@ -152,11 +152,12 @@ def latest_snapshot(project_url, api_key, session, *, transport=None, now=None):
                     weeks.add(match[0])
                 except ValueError:
                     continue
-    # Newest archive week with SPX raw files. Filenames sort by acquisition stamp.
+    # Select the newest CBOE source timestamp among *all* listing pages.
+    # The filename timestamp is not proof of the actual download time.
     for week in sorted(weeks, reverse=True):
         prefix = week + '/snapshots'
+        candidates = []
         for rows in _entries(base, api_key, session.access_token, prefix, transport):
-            candidates = []
             for row in rows:
                 name = row.get('name', '')
                 match = RAW_NAME.fullmatch(name) if isinstance(name, str) else None
@@ -166,9 +167,9 @@ def latest_snapshot(project_url, api_key, session, *, transport=None, now=None):
                     except ValueError:
                         continue
                     candidates.append((stamp, name, str(row.get('updated_at') or '')))
-            if candidates:
-                _, name, updated = max(candidates)
-                return SnapshotRef(prefix + '/' + name, updated)
+        if candidates:
+            _, name, updated = max(candidates)
+            return SnapshotRef(prefix + '/' + name, updated)
     raise StorageReadError('Nessuna fotografia SPX grezza disponibile nelle settimane archiviate.')
 
 
