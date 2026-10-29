@@ -466,23 +466,52 @@ def automatic_archive(mode):
         else:
             acquisition_rome = acquisition_cache[2]
             acquisition_issue = acquisition_cache[3]
+        # Edge's restricted reader can see raw SPX objects but not Serafini's
+        # /logs prefix. Storage's created_at is independent evidence of when
+        # the snapshot was uploaded, never an exact download timestamp.
+        archived_rome = None
+        archive_clock_type = ''
+        for raw_clock, clock_type in (
+            (reference.created_at, 'creazione'),
+            (reference.updated_at, 'ultimo aggiornamento'),
+        ):
+            if not raw_clock:
+                continue
+            try:
+                stamp = datetime.fromisoformat(str(raw_clock).replace('Z', '+00:00'))
+                if stamp.tzinfo is not None:
+                    archived_rome = stamp.astimezone(ZoneInfo('Europe/Rome'))
+                    archive_clock_type = clock_type
+                    break
+            except (ValueError, TypeError, OverflowError):
+                continue
+        display_rome = acquisition_rome or archived_rome
         st.markdown('#### Fotografia in analisi')
         overview = st.columns([1.1, 1.2, 1.2, 1.6])
-        overview[0].metric('Data rilevamento', acquisition_rome.strftime('%d/%m/%Y') if acquisition_rome else selected_day_label)
-        overview[1].metric('Ora rilevamento · Roma', acquisition_rome.strftime('%H:%M:%S') if acquisition_rome else 'Non verificata')
+        overview[0].metric('Data rilevamento', display_rome.strftime('%d/%m/%Y') if display_rome else selected_day_label)
+        overview[1].metric(
+            'Ora download · Roma' if acquisition_rome else 'Ora archivio · Roma',
+            display_rome.strftime('%H:%M:%S') if display_rome else 'Non disponibile'
+        )
         overview[2].metric('Ora del dato CBOE', source_time_label)
         overview[3].metric('Selezione', 'Ultimo rilevamento disponibile' if archive_mode == 'Ultimo rilevamento disponibile' else 'Storica selezionata')
         if acquisition_rome:
             st.caption(
-                f'Acquisizione registrata il {acquisition_rome:%d/%m/%Y} alle {acquisition_rome:%H:%M:%S} Roma. '
-                'Il timestamp CBOE del file può essere precedente: non indica quando è stato scaricato.'
+                f'Download documentato nel registro alle {acquisition_rome:%H:%M:%S} Roma. '
+                'L’orario CBOE è quello del dato sorgente, non del download.'
+            )
+        elif archived_rome:
+            st.caption(
+                f'Fotografia presente in Supabase: {archive_clock_type} dell’oggetto alle '
+                f'{archived_rome:%H:%M:%S} Roma. Questo orario prova la presenza in archivio, '
+                'non l’istante esatto del download. Il dato CBOE può essere precedente.'
             )
         else:
             st.caption(
-                'Il timestamp CBOE è l’ora del dato contenuta nel file, non quella del download. '
-                'L’orario di acquisizione non è verificabile; non viene sostituito con l’ora CBOE. '
-                + (acquisition_issue or '')
+                'Ora di archiviazione non disponibile. '
+                'Il timestamp CBOE non viene usato come orario di download.'
             )
+        
         with st.expander('Dettagli fotografia e aggiornamento', expanded=False):
             st.code(file_name, language=None)
             st.caption('Percorso archivio: ' + reference.path)
