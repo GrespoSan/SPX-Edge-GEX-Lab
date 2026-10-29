@@ -456,7 +456,12 @@ def automatic_archive(mode):
         acquisition_cache_key = ('edge_acquisition', reference.path)
         acquisition_cache = st.session_state.get('edge_archive_acquisition')
         if acquisition_cache is None or acquisition_cache[0] != acquisition_cache_key or now - acquisition_cache[1] >= 300:
-            acquisition_rome, acquisition_issue = snapshot_acquisition_status(project, key, session, reference)
+            # Acquisition logs are optional metadata. They must NEVER prevent
+            # the independent Edge analysis of an already readable CBOE file.
+            try:
+                acquisition_rome, acquisition_issue = snapshot_acquisition_status(project, key, session, reference)
+            except Exception:
+                acquisition_rome, acquisition_issue = None, 'Verifica registro non disponibile; la fotografia resta utilizzabile.'
             st.session_state['edge_archive_acquisition'] = (acquisition_cache_key, now, acquisition_rome, acquisition_issue)
         else:
             acquisition_rome = acquisition_cache[2]
