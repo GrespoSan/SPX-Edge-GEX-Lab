@@ -233,6 +233,9 @@ def snapshot_acquisition_status(project_url, api_key, session, snapshot, *, tran
                 try:
                     record = json.loads(_download(url, {'apikey': api_key, 'Authorization': 'Bearer ' + session.access_token}, transport))
                     readable += 1
+                    if not isinstance(record, dict):
+                        errors += 1
+                        continue
                     if record.get('file') != snapshot.path or record.get('status') not in ('NUOVO', 'INVARIATO'):
                         continue
                     raw = record.get('download_rome') or record.get('download_utc')
@@ -241,7 +244,7 @@ def snapshot_acquisition_status(project_url, api_key, session, snapshot, *, tran
                     stamp = datetime.fromisoformat(str(raw).replace('Z', '+00:00'))
                     if stamp.tzinfo is not None:
                         match.append(stamp.astimezone(ZoneInfo('Europe/Rome')))
-                except (ValueError, TypeError, KeyError, StorageReadError):
+                except (ValueError, TypeError, KeyError, AttributeError, OverflowError, StorageReadError):
                     errors += 1
     except (StorageReadError, ValueError, TypeError):
         return None, 'Elenco registri non accessibile all’utenza Edge (verificare permessi di sola lettura).'
