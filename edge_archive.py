@@ -138,11 +138,6 @@ def _entries(base, key, token, prefix, transport):
 
 
 def latest_snapshot(project_url, api_key, session, *, transport=None, now=None):
-    """Last downloaded SPX snapshot when acquisition logs are readable.
-
-    Serafini labels its 07:30 snapshot using download_rome in these same logs.
-    CBOE filenames encode source time, which may be hours older.
-    """
     current = time.time() if now is None else now
     if not isinstance(session, ReaderSession) or session.expires_at <= current + 15:
         raise StorageReadError('Sessione scaduta: accedere nuovamente.')
@@ -157,9 +152,11 @@ def latest_snapshot(project_url, api_key, session, *, transport=None, now=None):
                     weeks.add(match[0])
                 except ValueError:
                     continue
+    # Select the newest CBOE source timestamp among *all* listing pages.
+    # The filename timestamp is not proof of the actual download time.
     for week in sorted(weeks, reverse=True):
         prefix = week + '/snapshots'
-        candidates = {}
+        candidates = []
         for rows in _entries(base, api_key, session.access_token, prefix, transport):
             for row in rows:
                 name = row.get('name', '')
@@ -169,42 +166,10 @@ def latest_snapshot(project_url, api_key, session, *, transport=None, now=None):
                         stamp = datetime.strptime(match[1] + match[2], '%Y%m%d%H%M%S')
                     except ValueError:
                         continue
-                    candidates[prefix + '/' + name] = (stamp, str(row.get('updated_at') or ''))
-        if not candidates:
-            continue
-        # Use exactly the Serafini register fields and statuses.
-        # A log read failure never grants Edge additional permissions.
-        logged = []
-        try:
-            log_prefix = week + '/logs'
-            for rows in _entries(base, api_key, session.access_token, log_prefix, transport):
-                for entry in rows:
-                    name = str(entry.get('name', ''))
-                    if not name.endswith('.json') or '/' in name or '..' in name:
-                        continue
-                    url = base + '/storage/v1/object/authenticated/spx-snapshots/' + log_prefix + '/' + name
-                    try:
-                        record = json.loads(_download(url, {'apikey': api_key, 'Authorization': 'Bearer ' + session.access_token}, transport))
-                        path = record.get('file')
-                        if path not in candidates or record.get('status') not in ('NUOVO', 'INVARIATO'):
-                            continue
-                        timestamp = record.get('download_rome') or record.get('download_utc')
-                        if not timestamp:
-                            continue
-                        instant = datetime.fromisoformat(str(timestamp).replace('Z', '+00:00'))
-                        if instant.tzinfo is not None:
-                            logged.append((instant.timestamp(), path))
-                    except (ValueError, TypeError, KeyError, StorageReadError):
-                        continue
-        except (StorageReadError, ValueError, TypeError):
-            pass
-        if logged:
-            _, latest_path = max(logged)
-            return SnapshotRef(latest_path, candidates[latest_path][1])
-        # Compatibility fallback: if Edge cannot read Serafini logs, select the
-        # newest source file but never call the filename timestamp a download.
-        path, (_, updated) = max(candidates.items(), key=lambda pair: (pair[1][0], pair[0]))
-        return SnapshotRef(path, updated)
+                    candidates.append((stamp, name, str(row.get('updated_at') or '')))
+        if candidates:
+            _, name, updated = max(candidates)
+            return SnapshotRef(prefix + '/' + name, updated)
     raise StorageReadError('Nessuna fotografia SPX grezza disponibile nelle settimane archiviate.')
 
 
