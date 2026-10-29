@@ -370,11 +370,11 @@ def automatic_archive(mode):
         clear_private_session()
         st.rerun(scope="app")
     archive_mode = st.radio(
-        'Fotografia da analizzare', ('Ultimo rilevamento disponibile', 'Altro rilevamento storico odierno'),
+        'Fotografia da analizzare', ('Ultimo rilevamento disponibile', 'Altro rilevamento storico'),
         horizontal=True, key='edge_archive_mode',
     )
     selected_reference = None
-    if archive_mode == 'Altro rilevamento storico odierno':
+    if archive_mode == 'Altro rilevamento storico':
         selected_day = st.date_input(
             'Data della fotografia originale', value=date.today(),
             min_value=date(2026, 10, 1), max_value=date.today(),
@@ -470,7 +470,7 @@ def automatic_archive(mode):
         st.caption(f"✓ Verifica aritmetica superata · {report['contracts_cross_checked']} contratti · NET e Gross GEX riconciliati")
         target = datetime.strptime(reference.path.rsplit('/', 1)[-1][9:17], '%Y%m%d').date()
         conversion = render_result(result, basis_target=target, archive_context=(project, key, session),
-                                   historical=archive_mode=='Altro rilevamento storico odierno')
+                                   historical=archive_mode=='Altro rilevamento storico')
         # Download the exact, unmodified private snapshot used by this analysis.
         original_name = reference.path.rsplit('/', 1)[-1]
         st.download_button(
