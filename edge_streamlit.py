@@ -337,15 +337,27 @@ def render_result(result, synthetic=False, basis_target=None, archive_context=No
             maximum = curve.loc[curve["net_gex"].idxmax()]
             minimum = curve.loc[curve["net_gex"].idxmin()]
             st.markdown(
-                f"**Curva teorica GEX {result['mode']}** · "
+                f"**Curva teorica GEX {result['mode']} — fotografia Cboe ore {italian_time(result['timestamp'])[11:16]} Roma** · "
                 f"Max **{maximum['net_gex']/1e9:+.2f} mld** (ES {maximum['spot']+shift:,.2f}) · "
                 f"Min **{minimum['net_gex']/1e9:+.2f} mld** (ES {minimum['spot']+shift:,.2f})"
             )
         chart = go.Figure(go.Scatter(x=curve["spot"] + shift, y=curve["net_gex"] / 1e9, mode="lines", name="NET GEX ipotetico"))
-        chart.add_hline(y=0, line_dash="dot")
+        chart.add_hline(y=0, line_dash="dash", line_color="#d9b44a", line_width=1.5)
+        chart.update_yaxes(zeroline=False)
         chart.update_layout(xaxis_title="Prezzo ES equivalente" if translated else "Spot ipotetico " + result['symbol'], yaxis_title=f"GEX {result['symbol']} · miliardi USD/1%")
         st.plotly_chart(chart, width="stretch")
         st.write("Attraversamenti dello zero" + suffix + ":", [price(value) for value in result['flips']] or "Nessun attraversamento nella finestra Edge")
+        st.markdown(
+            """
+**Come leggere la curva teorica GEX**
+
+**A cosa serve?** Se l'SPX raggiungesse un determinato prezzo, come cambierebbe l'esposizione Gamma complessiva delle opzioni 0DTE considerate? La curva mostra il GEX ricalcolato per diversi prezzi ipotetici partendo dalla stessa fotografia Cboe, senza ipotizzare nuove operazioni o variazioni delle posizioni aperte.
+
+**Sopra lo zero (GEX positivo):** in determinate condizioni, le coperture dei dealer possono contrastare i movimenti del prezzo, favorendo una maggiore stabilità. **Sotto lo zero (GEX negativo):** le coperture possono invece amplificare i movimenti e la volatilità.
+
+**Il passaggio attraverso lo zero** identifica un Gamma Flip teorico. La curva non prevede la direzione del mercato e non costituisce un segnale automatico di acquisto o vendita.
+            """
+        )
     with st.expander("Metodo Edge e provenienza"):
         st.write("Gamma Black–Scholes con r = q = 0; GEX = segno × gamma × OI × 100 × spot² × 0,01. Call positive e put negative sono assunzioni sulle posizioni, non dati osservati dei dealer.")
         st.write("Tempo residuo dal timestamp storico o dall'ultima chiusura secondo il motore Edge; mai dalla data odierna. Radice SPX/NDX: AM 09:30 New York; SPXW/NDXP: PM alla chiusura di sessione.")
