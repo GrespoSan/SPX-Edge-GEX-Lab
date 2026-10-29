@@ -15,7 +15,7 @@ from streamlit.errors import StreamlitSecretNotFoundError
 
 from edge_clone_engine import MODES, analyze
 from edge_storage import StorageReadError
-from edge_archive import login_reader, renew_reader, latest_snapshot, download_snapshot, snapshots_for_day, snapshot_acquisition
+from edge_archive import login_reader, renew_reader, latest_snapshot, download_snapshot, snapshots_for_day, snapshot_acquisition_status
 from edge_verification import verify_snapshot
 from edge_futures import BasisUnavailable, parse_basis, rounded_basis
 from edge_shared_basis import read_shared_basis
@@ -456,10 +456,11 @@ def automatic_archive(mode):
         acquisition_cache_key = ('edge_acquisition', reference.path)
         acquisition_cache = st.session_state.get('edge_archive_acquisition')
         if acquisition_cache is None or acquisition_cache[0] != acquisition_cache_key or now - acquisition_cache[1] >= 300:
-            acquisition_rome = snapshot_acquisition(project, key, session, reference)
-            st.session_state['edge_archive_acquisition'] = (acquisition_cache_key, now, acquisition_rome)
+            acquisition_rome, acquisition_issue = snapshot_acquisition_status(project, key, session, reference)
+            st.session_state['edge_archive_acquisition'] = (acquisition_cache_key, now, acquisition_rome, acquisition_issue)
         else:
             acquisition_rome = acquisition_cache[2]
+            acquisition_issue = acquisition_cache[3]
         st.markdown('#### Fotografia in analisi')
         overview = st.columns([1.1, 1.2, 1.2, 1.6])
         overview[0].metric('Data rilevamento', acquisition_rome.strftime('%d/%m/%Y') if acquisition_rome else selected_day_label)
@@ -474,8 +475,8 @@ def automatic_archive(mode):
         else:
             st.caption(
                 'Il timestamp CBOE è l’ora del dato contenuta nel file, non quella del download. '
-                'L’orario di acquisizione non è verificabile con i registri accessibili a Edge; '
-                'non viene sostituito con l’ora CBOE.'
+                'L’orario di acquisizione non è verificabile; non viene sostituito con l’ora CBOE. '
+                + (acquisition_issue or '')
             )
         with st.expander('Dettagli fotografia e aggiornamento', expanded=False):
             st.code(file_name, language=None)
