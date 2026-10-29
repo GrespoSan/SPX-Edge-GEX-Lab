@@ -35,6 +35,7 @@ class ReaderSession:
 class SnapshotRef:
     path: str
     updated_at: str
+    created_at: str = ''  # Storage upload timestamp; not CBOE source time or exact download
 
 
 def reader_id(value):
@@ -166,10 +167,10 @@ def latest_snapshot(project_url, api_key, session, *, transport=None, now=None):
                         stamp = datetime.strptime(match[1] + match[2], '%Y%m%d%H%M%S')
                     except ValueError:
                         continue
-                    candidates.append((stamp, name, str(row.get('updated_at') or '')))
+                    candidates.append((stamp, name, str(row.get('updated_at') or ''), str(row.get('created_at') or '')))
         if candidates:
-            _, name, updated = max(candidates)
-            return SnapshotRef(prefix + '/' + name, updated)
+            _, name, updated, created = max(candidates)
+            return SnapshotRef(prefix + '/' + name, updated, created)
     raise StorageReadError('Nessuna fotografia SPX grezza disponibile nelle settimane archiviate.')
 
 
@@ -208,7 +209,7 @@ def snapshots_for_day(project_url, api_key, session, selected_day, *, transport=
                 datetime.strptime(match[1] + match[2], '%Y%m%d%H%M%S')
             except ValueError:
                 continue
-            found.append(SnapshotRef(prefix + '/' + name, str(row.get('updated_at') or '')))
+            found.append(SnapshotRef(prefix + '/' + name, str(row.get('updated_at') or ''), str(row.get('created_at') or '')))
     return sorted(found, key=lambda item: item.path)
 
 
