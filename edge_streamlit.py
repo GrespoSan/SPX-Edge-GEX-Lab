@@ -243,7 +243,7 @@ def chart_market(result, conversion, target, synthetic, historical):
     return market, None
 
 
-def render_result(result, synthetic=False, basis_target=None, archive_context=None, historical=False):
+def render_result(result, synthetic=False, basis_target=None, archive_context=None, historical=False, snapshot_clock=None, snapshot_clock_verified=False):
     if synthetic:
         st.caption("Risultati su esempio sintetico; nessuna verifica su dati reali.")
 
@@ -255,9 +255,19 @@ def render_result(result, synthetic=False, basis_target=None, archive_context=No
     suffix = ' ES' if translated else ' ' + result['symbol']
     def price(value):
         return None if value is None else value + shift
-    st.markdown(f"**Timestamp del dato CBOE (interpretato come UTC): {italian_time(result['timestamp'])}**")
-    if archive_context is not None:
-        st.caption("L'orario di acquisizione/download è distinto dal timestamp del dato: per la fotografia delle 07:30 verificarlo nel registro di acquisizione Serafini. Non viene dedotto dal nome file.")
+    if snapshot_clock is not None:
+        clock_label = 'rilevamento' if snapshot_clock_verified else 'archiviazione'
+        st.markdown(f"**Fotografia CBOE · {clock_label} ore {snapshot_clock:%H:%M} Roma**")
+        st.caption(
+            f"Dato originale CBOE: {italian_time(result['timestamp'])}. "
+            + ("Orario del download verificato nel registro."
+               if snapshot_clock_verified
+               else "Orario di archiviazione Supabase; non è necessariamente l'istante esatto del download.")
+        )
+    else:
+        st.markdown(f"**Timestamp del dato CBOE (interpretato come UTC): {italian_time(result['timestamp'])}**")
+        if archive_context is not None:
+            st.caption("Orario del download non disponibile: viene mostrato soltanto quello del dato CBOE.")
     columns = st.columns(5)
     for column, label, value in zip(columns,
             ("Spot equivalente ES" if translated else 'Spot' + suffix,
@@ -337,7 +347,11 @@ def render_result(result, synthetic=False, basis_target=None, archive_context=No
             maximum = curve.loc[curve["net_gex"].idxmax()]
             minimum = curve.loc[curve["net_gex"].idxmin()]
             st.markdown(
-                f"**Curva teorica GEX {result['mode']} — fotografia Cboe ore {italian_time(result['timestamp'])[11:16]} Roma** · "
+                f"**Curva teorica GEX {result['mode']} — " 
+                + (f"fotografia Cboe {'rilevata' if snapshot_clock_verified else 'archiviata'} ore {snapshot_clock:%H:%M} Roma"
+                   if snapshot_clock is not None
+                   else f"dato Cboe ore {italian_time(result['timestamp'])[11:16]} Roma")
+                + "** · "
                 f"Max **{maximum['net_gex']/1e9:+.2f} mld** (ES {maximum['spot']+shift:,.2f}) · "
                 f"Min **{minimum['net_gex']/1e9:+.2f} mld** (ES {minimum['spot']+shift:,.2f})"
             )
@@ -535,7 +549,8 @@ def automatic_archive(mode):
         st.caption(f"✓ Verifica aritmetica superata · {report['contracts_cross_checked']} contratti · NET e Gross GEX riconciliati")
         target = datetime.strptime(reference.path.rsplit('/', 1)[-1][9:17], '%Y%m%d').date()
         conversion = render_result(result, basis_target=target, archive_context=(project, key, session),
-                                   historical=archive_mode=='Altro rilevamento storico')
+                                   historical=archive_mode=='Altro rilevamento storico',
+                                   snapshot_clock=display_rome, snapshot_clock_verified=acquisition_rome is not None)
         # Download the exact, unmodified private snapshot used by this analysis.
         original_name = reference.path.rsplit('/', 1)[-1]
         st.download_button(
