@@ -247,40 +247,52 @@ def snapshots_for_day(project_url, api_key, session, selected_day, *, transport=
     return sorted(found, key=lambda item: item.path)
 
 
-def snapshot_acquisition(project_url, api_key, session, snapshot, *, transport=None, now=None):
-    """Verified earliest download instant from existing Serafini archive logs.
-    Uses the already-authorized reader only; never assumes storage updated_at
-    or filename CBOE time is acquisition. Returns None if logs inaccessible.
-    """
-    from datetime import timezone
+def snapshot_acquisition_status(project_url, api_key, session, snapshot, *, transport=None, now=None):
+    """Return (verified Rome download time, reason) using read-only Serafini logs."""
     from zoneinfo import ZoneInfo
     if not isinstance(snapshot, SnapshotRef):
-        return None
-    current=time.time() if now is None else now
-    if not isinstance(session, ReaderSession) or session.expires_at<=current+15:
-        return None
-    prefix=snapshot.path.split('/snapshots/')[0]+'/logs'
-    match=[]
+        return None, 'Riferimento fotografia non valido.'
+    current = time.time() if now is None else now
+    if not isinstance(session, ReaderSession) or session.expires_at <= current + 15:
+        return None, 'Sessione Edge scaduta.'
+    prefix = snapshot.path.split('/snapshots/')[0] + '/logs'
+    match, listed, readable, errors = [], 0, 0, 0
     try:
         for rows in _entries(_project_url(project_url), api_key, session.access_token, prefix, transport):
             for entry in rows:
-                name=str(entry.get('name',''))
+                name = str(entry.get('name', ''))
                 if not name.endswith('.json') or '/' in name or '..' in name:
                     continue
-                url=_project_url(project_url)+'/storage/v1/object/authenticated/spx-snapshots/'+prefix+'/'+name
+                listed += 1
+                url = _project_url(project_url) + '/storage/v1/object/authenticated/spx-snapshots/' + prefix + '/' + name
                 try:
-                    raw=_download(url,{'apikey':api_key,'Authorization':'Bearer '+session.access_token},transport)
-                    record=json.loads(raw)
-                    if record.get('file')!=snapshot.path or record.get('status') not in ('NUOVO','INVARIATO'):
+                    record = json.loads(_download(url, {'apikey': api_key, 'Authorization': 'Bearer ' + session.access_token}, transport))
+                    readable += 1
+                    if record.get('file') != snapshot.path or record.get('status') not in ('NUOVO', 'INVARIATO'):
                         continue
-                    timestamp=record.get('download_rome') or record.get('download_utc')
-                    if not timestamp:
+                    raw = record.get('download_rome') or record.get('download_utc')
+                    if not raw:
                         continue
-                    dt=datetime.fromisoformat(str(timestamp).replace('Z','+00:00'))
-                    if dt.tzinfo is not None:
-                        match.append(dt.astimezone(ZoneInfo('Europe/Rome')))
-                except (ValueError,TypeError,KeyError,StorageReadError):
-                    continue
-    except (StorageReadError,ValueError,TypeError):
-        return None
-    return min(match) if match else None
+                    stamp = datetime.fromisoformat(str(raw).replace('Z', '+00:00'))
+                    if stamp.tzinfo is not None:
+                        match.append(stamp.astimezone(ZoneInfo('Europe/Rome')))
+                except (ValueError, TypeError, KeyError, StorageReadError):
+                    errors += 1
+    except (StorageReadError, ValueError, TypeError):
+        return None, 'Elenco registri non accessibile all’utenza Edge (verificare permessi di sola lettura).'
+    if match:
+        return min(match), None
+    if listed == 0:
+        return None, 'Nessun registro visibile all’utenza Edge nella settimana selezionata.'
+    if readable == 0:
+        return None, 'Registri elencati ma non scaricabili dall’utenza Edge (verificare permessi di lettura).'
+    if errors:
+        return None, f'Nessuna corrispondenza valida per il file: {readable} registri letti, {errors} non leggibili.'
+    return None, f'Nessun registro associato a questa fotografia tra i {readable} registri leggibili.'
+
+
+def snapshot_acquisition(project_url, api_key, session, snapshot, *, transport=None, now=None):
+    """Backward-compatible verified download timestamp, or None."""
+    return snapshot_acquisition_status(
+        project_url, api_key, session, snapshot, transport=transport, now=now
+    )[0]
