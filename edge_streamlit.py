@@ -370,11 +370,11 @@ def automatic_archive(mode):
         clear_private_session()
         st.rerun(scope="app")
     archive_mode = st.radio(
-        'Fotografia da analizzare', ('Ultima disponibile', 'Seleziona fotografia storica'),
+        'Fotografia da analizzare', ('Ultimo rilevamento disponibile', 'Altro rilevamento storico odierno'),
         horizontal=True, key='edge_archive_mode',
     )
     selected_reference = None
-    if archive_mode == 'Seleziona fotografia storica':
+    if archive_mode == 'Altro rilevamento storico odierno':
         selected_day = st.date_input(
             'Data della fotografia originale', value=date.today(),
             min_value=date(2026, 10, 1), max_value=date.today(),
@@ -410,7 +410,7 @@ def automatic_archive(mode):
     now = time.monotonic()
     fetched = st.session_state.get('edge_archive_fetched', 0)
     try:
-        if archive_mode == 'Ultima disponibile':
+        if archive_mode == 'Ultimo rilevamento disponibile':
             refresh_due = force or 'edge_archive_raw' not in st.session_state or now - fetched >= 110 or st.session_state.get('edge_archive_selection') != 'latest'
             if refresh_due:
                 reference = latest_snapshot(project, key, session)
@@ -442,7 +442,7 @@ def automatic_archive(mode):
         overview = st.columns([1.2, 1, 1.8])
         overview[0].metric('Data del dato CBOE', selected_day_label)
         overview[1].metric('Ora dato CBOE · Roma', source_time_label)
-        overview[2].metric('Selezione', 'Ultima disponibile' if archive_mode == 'Ultima disponibile' else 'Storica selezionata')
+        overview[2].metric('Selezione', 'Ultimo rilevamento disponibile' if archive_mode == 'Ultimo rilevamento disponibile' else 'Storica selezionata')
         st.caption(
             'L’orario mostrato si riferisce al dato CBOE (interpretato come UTC), '
             'non all’effettivo download. Quest’ultimo viene verificato separatamente nei registri Serafini.'
@@ -452,7 +452,7 @@ def automatic_archive(mode):
             st.caption('Percorso archivio: ' + reference.path)
             st.caption(
                 'Controllo della fotografia più recente ogni 2 minuti a pagina aperta.'
-                if archive_mode == 'Ultima disponibile'
+                if archive_mode == 'Ultimo rilevamento disponibile'
                 else 'Fotografia storica fissata: non viene sostituita automaticamente.'
             )
         raw = st.session_state['edge_archive_raw']
@@ -470,7 +470,7 @@ def automatic_archive(mode):
         st.caption(f"✓ Verifica aritmetica superata · {report['contracts_cross_checked']} contratti · NET e Gross GEX riconciliati")
         target = datetime.strptime(reference.path.rsplit('/', 1)[-1][9:17], '%Y%m%d').date()
         conversion = render_result(result, basis_target=target, archive_context=(project, key, session),
-                                   historical=archive_mode=='Seleziona fotografia storica')
+                                   historical=archive_mode=='Altro rilevamento storico odierno')
         # Download the exact, unmodified private snapshot used by this analysis.
         original_name = reference.path.rsplit('/', 1)[-1]
         st.download_button(
