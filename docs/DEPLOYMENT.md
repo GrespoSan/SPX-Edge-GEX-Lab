@@ -16,22 +16,26 @@ Usare **Create app** nell'account Streamlit del proprietario e collegare soltant
 Non modificare eventuali app Serafini. Non configurare cron-job, callback, MT4,
 feed CBOE live o connessioni ai suoi database. Non servono Node.js, Alpaca,
 FastAPI, una base dati o una service-role key per l'app Streamlit.
-L'app parte senza Secrets; il caricamento manuale e l'esempio sintetico restano
-disponibili anche senza Supabase.
+L'app e' protetta da una sola password impostata in `EDGE_APP_PASSWORD`
+nei Secrets Streamlit. In assenza di questa password non mostra alcuna
+modalita', nemmeno caricamento manuale o esempio sintetico.
 
 ## Lettura automatica del bucket privato
 
 Seguire la procedura aggiornata in [AUTOMATIC_ACCESS.md](AUTOMATIC_ACCESS.md).
-La nuova interfaccia richiede il login dell'utenza dedicata prima di accedere
-ai dati privati. Configurare soltanto URL, chiave publishable/anon, User UID e
-flag di attivazione nei Secrets della sola Edge; niente password Auth, JWT
-condivisi, service-role key o URL firmati globali.
+La nuova interfaccia richiede solo la password `EDGE_APP_PASSWORD`
+digitata nella pagina. Configurare nei Secrets della sola Edge anche
+`EDGE_READER_EMAIL` e `EDGE_READER_PASSWORD`: sono le credenziali
+Supabase dell'utenza di sola lettura gia' creata, usate dal server.
+Mantenere URL, chiave publishable/anon, User UID e flag di attivazione.
+Nessuna chiave service-role, token condiviso o URL firmato globale.
 
 Il bucket resta privato. Storage riceve solo richieste di elenco e download;
 le POST Auth servono al login e rinnovo della sessione, non a scrivere fotografie.
 La policy dedicata e' una SELECT per un solo UID e per i soli percorsi raw SPX;
 va installata e verificata prima di attivare il collegamento.
-Il caricamento locale e il demo restano utilizzabili senza queste impostazioni.
+Anche caricamento locale e demo richiedono l'accesso con la password
+dell'app; il backend privato resta configurato separatamente.
 
 ## Verifica prima e dopo il deploy
 
