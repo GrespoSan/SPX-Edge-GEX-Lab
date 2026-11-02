@@ -22,21 +22,28 @@ Vedere [verifiche e limiti](VALIDATION.md).
 4. Se una verifica della query fallisce, fermarsi e condividere il messaggio:
    non eliminare o allargare le protezioni per farla passare. La transazione
    esegue rollback su errore. Se la policy esiste gia', si ferma senza sostituirla.
-5. Nei Secrets della sola app Streamlit Edge configurare:
+5. Nei **Secrets della sola app Streamlit Edge** configurare:
 
    ```toml
+   EDGE_APP_PASSWORD = "UNA_PASSWORD_FORTE_E_DISTINTA_DA_QUELLA_SUPABASE"
    SUPABASE_URL = "https://PROJECT.supabase.co"
    SUPABASE_ANON_KEY = "CHIAVE_PUBLISHABLE_O_ANON"
    EDGE_READER_USER_ID = "UUID_UTENTE_EDGE"
    EDGE_ARCHIVE_ENABLED = true
+   EDGE_READER_EMAIL = "EMAIL_DELL_UTENTE_EDGE"
+   EDGE_READER_PASSWORD = "PASSWORD_DELL_UTENTE_EDGE"
    ```
 
-   Inserire i valori effettivi solo nel pannello Secrets. La chiave deve essere
-   publishable/anon, mai service_role o sb_secret_*. La password dell'utenza Edge
-   non va nei Secrets: viene inserita nel form di login dell'app.
-6. Aprire Edge, scegliere Archivio SPX automatico e accedere con email e password
-   dell'utenza dedicata. L'app ricorda l'accesso nella sessione e rinnova i JWT;
-   non servono download, token copiati o link firmati rinnovati a mano.
+   **Non condividere mai le password in chat e non scriverle su GitHub.**
+   La chiave deve essere publishable/anon, mai service_role o sb_secret_*.
+   Le credenziali EDGE_READER_* sono quelle dell'utenza Supabase Edge di sola
+   lettura già configurata, non dell'utente amministratore di Serafini.
+   Il server Streamlit usa automaticamente quell'utenza per l'accesso ai dati.
+6. Aprire Edge e digitare **solo la password EDGE_APP_PASSWORD**.
+   La pagina non richiede più email o password Supabase. La sessione JWT
+   resta gestita sul server e viene rinnovata automaticamente. La password
+   dell'app è necessaria anche per caricamento manuale ed esempio sintetico.
+   Se la password non è configurata l'accesso rimane bloccato.
 
 ## Comportamento automatico
 
@@ -61,10 +68,12 @@ se cambia, viene scaricato nuovamente. E' disponibile anche Aggiorna ora.
 Non vengono creati cron-job o collector; ad app chiusa non ci sono nuovi poll.
 Un riavvio, logout o revoca puo' richiedere un nuovo login.
 
-I visitatori anonimi vedono solo il form di accesso o le modalita' pubbliche di
-caricamento locale ed esempio sintetico. Nessun dato privato e' conservato in
-cache globale. Esci da Edge elimina token e dati della sessione locale; per
-revocare un account definitivamente usare gli strumenti Auth del proprietario.
+I visitatori non autenticati vedono solo il campo Password e non possono
+accedere nemmeno a caricamenti locali o demo. Nessun dato privato e'
+conservato in cache globale. Esci da Edge elimina autorizzazione dell'app,
+token e dati della sessione. Modificare EDGE_APP_PASSWORD nei Secrets
+invalida l'accesso alla successiva riesecuzione; per revocare i permessi
+Supabase intervenire sull'utenza Edge dedicata.
 
 ## Permessi e limiti della verifica
 
