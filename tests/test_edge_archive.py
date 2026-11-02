@@ -217,7 +217,8 @@ def test_private_login_automatic_selection_cached_rerun_and_logout(monkeypatch):
     assert report['independent_net_gex']==pytest.approx(report['net'])
     assert report['independent_gross_gex']==pytest.approx(report['gross'])
     assert any('10 contratti' in c.value for c in app.caption)
-    assert len(app.get('download_button'))==3
+    # Original CBOE, Edge CSV, Edge JSON and separate SPX comparison JSON.
+    assert len(app.get('download_button'))==4
     assert 'PRIVATE' not in json.dumps(report)
     app.session_state['edge_archive_fetched']=-1e12
     app.run(timeout=20)
