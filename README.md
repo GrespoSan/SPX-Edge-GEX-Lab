@@ -33,9 +33,13 @@ Non sono implementate nel wrapper le catene ETF SPY/QQQ.
 ## Fotografie private e Supabase
 
 L'archivio automatico usa un'utenza dedicata a Edge con SELECT sulle sole
-fotografie grezze SPX. Il bucket `spx-snapshots` resta privato. L'app pubblica
-richiede login prima di leggere, mostrare o scaricare quei dati; le sessioni
-sono isolate e non usano cache globali per le fotografie.
+fotografie grezze SPX. Il bucket `spx-snapshots` resta privato. L'app chiede
+**una sola password**, configurata come `EDGE_APP_PASSWORD` nei Secrets di
+Streamlit. L'email e la password dell'utenza Supabase Edge sono configurate
+separatamente come `EDGE_READER_EMAIL` e `EDGE_READER_PASSWORD` nei Secrets
+e vengono usate sul server per una sessione di sola lettura, senza campi
+Supabase nel login. Le sessioni sono isolate e non usano cache globali
+per le fotografie. Senza password app configurata, tutte le modalità sono bloccate.
 
 Dopo una configurazione iniziale, l'app seleziona l'ultima fotografia nella
 settimana di archivio piu' recente disponibile e controlla gli aggiornamenti
@@ -46,8 +50,8 @@ Il proprietario ha completato la configurazione reale e verificato la lettura.
 Per nuove installazioni seguire [la procedura iniziale](docs/AUTOMATIC_ACCESS.md)
 e [il modello dei Secrets](.streamlit/secrets.toml.example).
 Sono vietate credenziali privilegiate; password e token non vanno nel repository
-ne' in chat. I vecchi Secrets con token condiviso o URL firmato non vengono usati
-dall'interfaccia pubblica.
+ne' in chat, ma unicamente nei Secrets Streamlit della sola app Edge.
+I vecchi Secrets con token condiviso o URL firmato non vengono usati.
 
 
 ## Livelli Future ES
