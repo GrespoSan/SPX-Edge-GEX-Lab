@@ -79,3 +79,25 @@ def test_server_side_supabase_credentials_and_logout(monkeypatch):
     assert not app.exception
     assert [item.label for item in app.text_input] == ["Password"]
     assert "edge_reader_session" not in app.session_state
+
+
+def test_supabase_http_402_reports_quota_not_bad_password(monkeypatch):
+    monkeypatch.setattr(
+        A, "login_reader",
+        lambda *args, **kwargs: (_ for _ in ()).throw(
+            StorageReadError("Richiesta di lettura/accesso non riuscita (HTTP 402).")
+        ),
+    )
+    app = app_with_password()
+    app.secrets["SUPABASE_URL"] = URL
+    app.secrets["SUPABASE_ANON_KEY"] = KEY
+    app.secrets["EDGE_READER_USER_ID"] = UID
+    app.secrets["EDGE_ARCHIVE_ENABLED"] = True
+    app.secrets["EDGE_READER_EMAIL"] = "reader@example.test"
+    app.secrets["EDGE_READER_PASSWORD"] = "SERVER_ONLY_TEST_PASSWORD"
+    app.run(timeout=20)
+    app.text_input[0].set_value("STRONG_TEST_APP_PASSWORD")
+    next(button for button in app.button if button.label == "Accedi a Edge").click().run(timeout=20)
+    assert not app.exception
+    assert any("HTTP 402" in error.value for error in app.error)
+    assert not app.selectbox and not app.metric
