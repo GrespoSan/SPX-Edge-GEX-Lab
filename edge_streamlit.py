@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import os
 import hashlib
+import hmac
 import json
 from datetime import datetime, date
 from pathlib import Path
@@ -63,10 +64,39 @@ def clear_private_session():
             st.session_state.pop(key, None)
 
 
+def password_gate():
+    """Fail-closed, per-browser-session password gate; no app data before login."""
+    expected = setting('EDGE_APP_PASSWORD')
+    if not isinstance(expected, str) or not expected.strip():
+        st.error('Password di accesso non configurata. Inserisci EDGE_APP_PASSWORD nei Secrets di Streamlit.')
+        st.stop()
+    # A changed secret invalidates previously authorized browser sessions.
+    version = hashlib.sha256(expected.encode('utf-8')).hexdigest()
+    if st.session_state.get('edge_app_authorized') is True:
+        if st.session_state.get('edge_app_password_version') == version:
+            return
+        clear_private_session()
+        st.session_state.pop('edge_app_authorized', None)
+        st.session_state.pop('edge_app_password_version', None)
+    st.caption('Accesso riservato · inserisci la password Edge.')
+    with st.form('edge_app_password_form', clear_on_submit=True):
+        entered = st.text_input('Password', type='password')
+        submitted = st.form_submit_button('Accedi a Edge')
+    if submitted:
+        if hmac.compare_digest(entered.encode('utf-8'), expected.encode('utf-8')):
+            st.session_state['edge_app_authorized'] = True
+            st.session_state['edge_app_password_version'] = version
+            st.rerun()
+        else:
+            st.error('Password non corretta.')
+    st.stop()
+
+
 def private_session(config):
+    """Automatic server-side Supabase reader login after the app password gate."""
     if config is None:
-        st.info('Archivio privato non configurato. La prima attivazione richiede l’utenza Edge dedicata e il suo permesso di sola lettura.')
-        return None
+        st.error('Archivio Edge non configurato: controlla i Secrets di Supabase.')
+        st.stop()
     project, key, user_id = config
     session = st.session_state.get('edge_reader_session')
     if session is not None:
@@ -76,24 +106,22 @@ def private_session(config):
         except StorageReadError:
             clear_private_session()
             session = None
-            st.warning('Sessione terminata o accesso revocato. Accedi nuovamente a Edge.')
     if session is None:
-        st.caption('Accesso alle sole fotografie private SPX. Usa l’utenza creata appositamente per Edge.')
-        with st.form('edge_reader_login', clear_on_submit=True):
-            email = st.text_input('Email Edge')
-            password = st.text_input('Password Edge', type='password')
-            submitted = st.form_submit_button('Accedi a Edge')
-        if submitted:
-            try:
-                session = login_reader(project, key, email, password, user_id)
-                clear_private_session()
-                st.session_state['edge_reader_session'] = session
-                st.rerun()
-            except StorageReadError as error:
-                st.error(str(error))
-        return None
+        email = setting('EDGE_READER_EMAIL')
+        password = setting('EDGE_READER_PASSWORD')
+        if not isinstance(email, str) or not email.strip() or not isinstance(password, str) or not password:
+            st.error('Lettura archivio non configurata: inserisci EDGE_READER_EMAIL e EDGE_READER_PASSWORD nei Secrets Streamlit.')
+            st.stop()
+        try:
+            session = login_reader(project, key, email, password, user_id)
+        except StorageReadError:
+            st.error('Accesso tecnico all’archivio non riuscito. Controlla le credenziali Edge nei Secrets.')
+            st.stop()
+        st.session_state['edge_reader_session'] = session
     if st.button('Esci da Edge', key='edge_reader_logout'):
         clear_private_session()
+        st.session_state.pop('edge_app_authorized', None)
+        st.session_state.pop('edge_app_password_version', None)
         st.rerun()
     return session
 
@@ -581,12 +609,11 @@ def main():
     st.set_page_config(page_title="SPX Edge GEX Lab", layout="wide")
     st.title("SPX · Edge GEX Lab")
     st.caption("Applicazione indipendente · fotografie CBOE in sola lettura")
-    # Authentication gate: no trading controls, file upload or charts before login.
+    # Password gate applies to ALL app modes, including upload and synthetic demo.
+    password_gate()
+    # Keep Supabase's dedicated, read-only identity independent of the app password.
     config = archive_configuration()
-    if config is not None:
-        session = private_session(config)
-        if session is None:
-            st.stop()
+    private_session(config)
     st.warning("Analisi modellata per ricerca. Posizioni dealer non osservabili; fotografie e open interest possono essere ritardati.")
     mode = st.selectbox("Scadenze da analizzare", MODES, index=0)
     raw, synthetic = source_data(mode)
