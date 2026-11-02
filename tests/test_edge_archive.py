@@ -209,7 +209,7 @@ def test_private_login_automatic_selection_cached_rerun_and_logout(monkeypatch):
         calls.append('get');return (ROOT/'fixtures/synthetic_cboe_spx.json').read_bytes()+b'\n'*int(version[0])
     monkeypatch.setattr(A,'download_snapshot',download)
     app=configured_app().run(timeout=20)
-    assert not app.exception and not app.error and len(app.metric)==5
+    assert not app.exception and not app.error and len(app.metric)==9
     assert calls==['list','get']
     assert checks==['0DTE']
     report=app.session_state['edge_archive_analysis'][2]
@@ -224,7 +224,7 @@ def test_private_login_automatic_selection_cached_rerun_and_logout(monkeypatch):
     assert not app.exception and calls==['list','get','list']
     assert checks==['0DTE']
     app.selectbox[0].set_value('Prossime 4 scadenze').run(timeout=20)
-    assert not app.exception and len(app.metric)==5 and calls==['list','get','list']
+    assert not app.exception and len(app.metric)==9 and calls==['list','get','list']
     assert checks==['0DTE','Prossime 4 scadenze']
     previous_hash=app.session_state['edge_archive_analysis'][2]['sha256']
     version[0]='2'
@@ -251,7 +251,7 @@ def test_arithmetic_mismatch_does_not_publish_unverified_metrics_or_report(monke
     monkeypatch.setattr(V,'verify_snapshot',mismatch)
     app=configured_app().run(timeout=20)
     assert not app.exception and app.error[0].value=='NET GEX non riconciliato.'
-    assert not app.success and len(app.metric)==0 and len(app.get('download_button'))==0
+    assert not app.success and len(app.metric)==4 and len(app.get('download_button'))==0
     assert 'edge_archive_analysis' not in app.session_state
 
 
@@ -298,8 +298,8 @@ def test_es_translation_preserves_spx_math_and_exports_and_scopes_override_to_da
     app.query_params['es_basis']='40'
     app.run(timeout=20)
     assert not app.exception and not app.error and len(calls)==1
-    assert [m.value for m in app.metric[:3]]==['6,040.00','6,040.00','6,040.00']
-    assert app.metric[0].label=='Spot equivalente ES'
+    assert [m.value for m in app.metric[4:7]]==['6,040.00','6,040.00','6,040.00']
+    assert app.metric[4].label=='Spot equivalente ES'
     report=json.loads(downloads['Scarica verifica Edge JSON'])
     assert report['net']==original['net'] and report['gross']==original['gross']
     assert report['spot']==6000 and report['display_conversion']['offset']==40
@@ -319,14 +319,14 @@ def test_es_translation_preserves_spx_math_and_exports_and_scopes_override_to_da
     assert figures[0]['layout']['yaxis']['range']==figures[0]['layout']['yaxis2']['range']
     assert array(figures[1]['data'][0]['x'])==pytest.approx(original['curve'].spot.to_numpy()+40)
     app.radio(key='edge_price_view').set_value('Indice SPX').run(timeout=20)
-    assert not app.exception and app.metric[0].value=='6,000.00'
+    assert not app.exception and app.metric[4].value=='6,000.00'
     app.radio(key='edge_price_view').set_value('Future ES (equivalente)').run(timeout=20)
-    assert not app.exception and app.metric[0].value=='6,040.00' and len(calls)==1
+    assert not app.exception and app.metric[4].value=='6,040.00' and len(calls)==1
     current_day[0]='22'
     app.session_state['edge_archive_fetched']=-1e12
     app.run(timeout=20)
     assert not app.exception and not app.error and len(calls)==2
-    assert app.metric[0].label=='Spot SPX' and app.metric[0].value=='6,000.00'
+    assert app.metric[4].label=='Spot SPX' and app.metric[4].value=='6,000.00'
     assert json.loads(downloads['Scarica verifica Edge JSON'])['display_conversion']['offset'] is None
     assert any('restano in SPX' in message.value for message in app.info)
 
@@ -347,23 +347,23 @@ def test_automatic_es_basis_rounded_once_per_date_and_manual_override_retained(m
     monkeypatch.setattr(F,'download_basis',lambda *a,**k:pytest.fail('Edge must not recalculate the shared basis'))
     app=configured_app();app.session_state['edge_price_view']='Future ES (equivalente)'
     app.run(timeout=20)
-    assert not app.exception and app.metric[0].value=='6,040.00' and len(calls)==1
+    assert not app.exception and app.metric[4].value=='6,040.00' and len(calls)==1
     record=app.session_state['edge_basis_days']['2026-10-21']
     record['read_at']=-1e12
     raw_basis[0]=40.5
     app.run(timeout=20)
-    assert not app.exception and app.metric[0].value=='6,041.00' and len(calls)==2
+    assert not app.exception and app.metric[4].value=='6,041.00' and len(calls)==2
     app.text_input[0].set_value('-10,5').run(timeout=20)
-    assert not app.exception and app.metric[0].value=='5,989.50' and len(calls)==2
+    assert not app.exception and app.metric[4].value=='5,989.50' and len(calls)==2
     app.selectbox[0].set_value('0DTE').run(timeout=20)
-    assert not app.exception and app.metric[0].value=='5,989.50' and len(calls)==2
+    assert not app.exception and app.metric[4].value=='5,989.50' and len(calls)==2
     next(b for b in app.button if b.label=='Rileggi ES − SPX').click().run(timeout=20)
-    assert not app.exception and app.metric[0].value=='6,041.00' and len(calls)==3
+    assert not app.exception and app.metric[4].value=='6,041.00' and len(calls)==3
     app.session_state['edge_basis_days']['2026-10-21']={
         'value':'100','attempted':True,'estimate':{'basis':100,'source':'old Yahoo result'},'error':''}
     app.session_state['edge_basis_input_2026-10-21']='100'
     app.run(timeout=20)
-    assert not app.exception and app.metric[0].value=='6,041.00' and len(calls)==4
+    assert not app.exception and app.metric[4].value=='6,041.00' and len(calls)==4
     next(b for b in app.button if b.label=='Esci da Edge').click().run(timeout=20)
     assert not app.exception and 'edge_basis_days' not in app.session_state
 
@@ -392,7 +392,7 @@ def test_price_refresh_updates_only_left_panel_and_retains_0dte_and_calculation_
     app=configured_app();app.session_state['edge_price_view']='Future ES (equivalente)'
     app.run(timeout=20)
     assert not app.exception and not app.error and checks==['0DTE'] and requests==[('ES=F',None)]
-    assert app.selectbox[0].value=='0DTE' and app.metric[0].value=='6,040.00'
+    assert app.selectbox[0].value=='0DTE' and app.metric[4].value=='6,040.00'
     net=app.session_state['edge_archive_analysis'][1]['net']
     first=json.loads(app.get('plotly_chart')[0].proto.spec)
     assert first['data'][0]['type']=='candlestick' and first['data'][0]['xaxis']=='x'
