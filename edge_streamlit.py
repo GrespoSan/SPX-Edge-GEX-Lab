@@ -114,8 +114,18 @@ def private_session(config):
             st.stop()
         try:
             session = login_reader(project, key, email, password, user_id)
-        except StorageReadError:
-            st.error('Accesso tecnico all’archivio non riuscito. Controlla le credenziali Edge nei Secrets.')
+        except StorageReadError as error:
+            if 'HTTP 402' in str(error):
+                st.error(
+                    'Supabase sta rifiutando il login tecnico dell’archivio (HTTP 402). '
+                    'Il problema è compatibile con una limitazione del progetto per quota o fatturazione: '
+                    'non cambiare le password. Verifica Usage e Billing nel progetto Serafini-SPX-GEX.'
+                )
+            else:
+                st.error(
+                    'Accesso tecnico all’archivio non disponibile. Verifica lo stato del '
+                    'progetto Supabase e la configurazione dell’utenza Edge nei Secrets.'
+                )
             st.stop()
         st.session_state['edge_reader_session'] = session
     if st.button('Esci da Edge', key='edge_reader_logout'):
