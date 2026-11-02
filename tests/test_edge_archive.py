@@ -1,5 +1,6 @@
 """Automatic private reader: real HTTP shapes, mocked transport, no remote writes."""
 import base64
+import hashlib
 import json
 from pathlib import Path
 
@@ -157,13 +158,25 @@ def test_download_uses_only_get_and_rejects_replay_or_other_paths():
             A.download_snapshot(URL,KEY,session(),A.SnapshotRef(path,''),now=NOW)
 
 
-def configured_app():
+def configured_app(authenticated=True):
+    """Archive scenarios run with the current password-only gate.
+
+    Gate denial and sessions have dedicated tests in test_edge_single_password.
+    No removed email/password browser form is used here.
+    """
     app=AppTest.from_file(str(ROOT/'edge_streamlit.py'))
     app.session_state['edge_price_view']='Indice SPX'
+    app.secrets['EDGE_APP_PASSWORD']='ISOLATED_TEST_PASSWORD'
     app.secrets['SUPABASE_URL']=URL
     app.secrets['SUPABASE_ANON_KEY']=KEY
     app.secrets['EDGE_READER_USER_ID']=UID
     app.secrets['EDGE_ARCHIVE_ENABLED']=True
+    app.secrets['EDGE_READER_EMAIL']='reader@example.test'
+    app.secrets['EDGE_READER_PASSWORD']='SERVER_ONLY_MOCK_PASSWORD'
+    if authenticated:
+        app.session_state['edge_app_authorized']=True
+        app.session_state['edge_app_password_version']=hashlib.sha256(
+            b'ISOLATED_TEST_PASSWORD').hexdigest()
     return app
 
 
@@ -171,9 +184,9 @@ def test_public_page_cannot_read_private_archive_without_login(monkeypatch):
     monkeypatch.setattr(A,'latest_snapshot',lambda *a,**k:pytest.fail('Anonymous storage request'))
     monkeypatch.setattr(S,'read_shared_basis',lambda *a,**k:pytest.fail('Anonymous shared feed request'))
     monkeypatch.setattr(M,'fetch_market',lambda *a,**k:pytest.fail('Anonymous market request'))
-    app=configured_app().run(timeout=20)
+    app=configured_app(authenticated=False).run(timeout=20)
     assert not app.exception and not app.error and len(app.metric)==0
-    assert [box.label for box in app.text_input]==['Email Edge','Password Edge']
+    assert [box.label for box in app.text_input]==['Password']
     assert len(app.get('form'))==1
     assert not app.radio and not app.selectbox and not app.get('download_button')
 
@@ -196,8 +209,6 @@ def test_private_login_automatic_selection_cached_rerun_and_logout(monkeypatch):
         calls.append('get');return (ROOT/'fixtures/synthetic_cboe_spx.json').read_bytes()+b'\n'*int(version[0])
     monkeypatch.setattr(A,'download_snapshot',download)
     app=configured_app().run(timeout=20)
-    app.text_input[0].set_value('edge@example.test');app.text_input[1].set_value('PRIVATE_PASSWORD')
-    app.button[0].click().run(timeout=20)
     assert not app.exception and not app.error and len(app.metric)==5
     assert calls==['list','get']
     assert checks==['0DTE']
@@ -205,10 +216,11 @@ def test_private_login_automatic_selection_cached_rerun_and_logout(monkeypatch):
     assert report['arithmetic_check']=='passed' and report['contracts_cross_checked']==10
     assert report['independent_net_gex']==pytest.approx(report['net'])
     assert report['independent_gross_gex']==pytest.approx(report['gross'])
-    assert app.success and '10 contratti' in app.success[0].value
+    assert any('10 contratti' in c.value for c in app.caption)
     assert len(app.get('download_button'))==3
     assert 'PRIVATE' not in json.dumps(report)
-    next(button for button in app.button if button.label=='Aggiorna ora').click().run(timeout=20)
+    app.session_state['edge_archive_fetched']=-1e12
+    app.run(timeout=20)
     assert not app.exception and calls==['list','get','list']
     assert checks==['0DTE']
     app.selectbox[0].set_value('Prossime 4 scadenze').run(timeout=20)
@@ -216,7 +228,8 @@ def test_private_login_automatic_selection_cached_rerun_and_logout(monkeypatch):
     assert checks==['0DTE','Prossime 4 scadenze']
     previous_hash=app.session_state['edge_archive_analysis'][2]['sha256']
     version[0]='2'
-    next(button for button in app.button if button.label=='Aggiorna ora').click().run(timeout=20)
+    app.session_state['edge_archive_fetched']=-1e12
+    app.run(timeout=20)
     assert not app.exception and not app.error
     assert calls==['list','get','list','list','get']
     assert checks==['0DTE','Prossime 4 scadenze','Prossime 4 scadenze']
@@ -225,7 +238,7 @@ def test_private_login_automatic_selection_cached_rerun_and_logout(monkeypatch):
     assert not app.exception and len(app.metric)==0
     assert 'edge_archive_raw' not in app.session_state and 'edge_reader_session' not in app.session_state
     assert 'edge_archive_analysis' not in app.session_state
-    assert len(app.text_input)==2
+    assert [box.label for box in app.text_input] == ['Password']
 
 
 def test_arithmetic_mismatch_does_not_publish_unverified_metrics_or_report(monkeypatch):
@@ -237,8 +250,6 @@ def test_arithmetic_mismatch_does_not_publish_unverified_metrics_or_report(monke
         raise ValueError('NET GEX non riconciliato.')
     monkeypatch.setattr(V,'verify_snapshot',mismatch)
     app=configured_app().run(timeout=20)
-    app.text_input[0].set_value('edge@example.test');app.text_input[1].set_value('PRIVATE_PASSWORD')
-    app.button[0].click().run(timeout=20)
     assert not app.exception and app.error[0].value=='NET GEX non riconciliato.'
     assert not app.success and len(app.metric)==0 and len(app.get('download_button'))==0
     assert 'edge_archive_analysis' not in app.session_state
@@ -250,8 +261,8 @@ def test_legacy_server_token_cannot_expose_private_data_to_public_page():
     app.secrets['SUPABASE_SNAPSHOT_SIGNED_URL']='PRIVATE_URL'
     app.run(timeout=20)
     assert not app.exception and len(app.metric)==0
-    assert 'Oggetto Supabase privato' not in app.radio[0].options
-    assert 'Fotografia con URL firmato' not in app.radio[0].options
+    assert not app.radio and not app.selectbox
+    assert any('EDGE_APP_PASSWORD' in e.value for e in app.error)
 
 
 def test_es_translation_preserves_spx_math_and_exports_and_scopes_override_to_date(monkeypatch):
@@ -286,8 +297,6 @@ def test_es_translation_preserves_spx_math_and_exports_and_scopes_override_to_da
     app.query_params['es_basis_date']='2026-10-21'
     app.query_params['es_basis']='40'
     app.run(timeout=20)
-    app.text_input[0].set_value('edge@example.test');app.text_input[1].set_value('PRIVATE_PASSWORD')
-    app.button[0].click().run(timeout=20)
     assert not app.exception and not app.error and len(calls)==1
     assert [m.value for m in app.metric[:3]]==['6,040.00','6,040.00','6,040.00']
     assert app.metric[0].label=='Spot equivalente ES'
@@ -314,7 +323,8 @@ def test_es_translation_preserves_spx_math_and_exports_and_scopes_override_to_da
     app.radio(key='edge_price_view').set_value('Future ES (equivalente)').run(timeout=20)
     assert not app.exception and app.metric[0].value=='6,040.00' and len(calls)==1
     current_day[0]='22'
-    next(b for b in app.button if b.label=='Aggiorna ora').click().run(timeout=20)
+    app.session_state['edge_archive_fetched']=-1e12
+    app.run(timeout=20)
     assert not app.exception and not app.error and len(calls)==2
     assert app.metric[0].label=='Spot SPX' and app.metric[0].value=='6,000.00'
     assert json.loads(downloads['Scarica verifica Edge JSON'])['display_conversion']['offset'] is None
@@ -337,8 +347,6 @@ def test_automatic_es_basis_rounded_once_per_date_and_manual_override_retained(m
     monkeypatch.setattr(F,'download_basis',lambda *a,**k:pytest.fail('Edge must not recalculate the shared basis'))
     app=configured_app();app.session_state['edge_price_view']='Future ES (equivalente)'
     app.run(timeout=20)
-    app.text_input[0].set_value('edge@example.test');app.text_input[1].set_value('PRIVATE_PASSWORD')
-    app.button[0].click().run(timeout=20)
     assert not app.exception and app.metric[0].value=='6,040.00' and len(calls)==1
     record=app.session_state['edge_basis_days']['2026-10-21']
     record['read_at']=-1e12
@@ -383,8 +391,6 @@ def test_price_refresh_updates_only_left_panel_and_retains_0dte_and_calculation_
     monkeypatch.setattr(M,'fetch_market',market)
     app=configured_app();app.session_state['edge_price_view']='Future ES (equivalente)'
     app.run(timeout=20)
-    app.text_input[0].set_value('edge@example.test');app.text_input[1].set_value('PRIVATE_PASSWORD')
-    app.button[0].click().run(timeout=20)
     assert not app.exception and not app.error and checks==['0DTE'] and requests==[('ES=F',None)]
     assert app.selectbox[0].value=='0DTE' and app.metric[0].value=='6,040.00'
     net=app.session_state['edge_archive_analysis'][1]['net']
@@ -438,12 +444,10 @@ def test_historical_picker_keeps_selected_photo_and_requests_its_day_candles(mon
                 'source':'Yahoo Finance','delay_minutes':None,'candles':pd.DataFrame()}
     monkeypatch.setattr(M,'fetch_market',market)
     app=configured_app().run(timeout=20)
-    app.text_input[0].set_value('edge@example.test');app.text_input[1].set_value('PRIVATE_PASSWORD')
-    app.button[0].click().run(timeout=20)
-    app.radio(key='edge_archive_mode').set_value('Seleziona fotografia storica').run(timeout=20)
+    app.radio(key='edge_archive_mode').set_value('Altro rilevamento storico').run(timeout=20)
     app.date_input[0].set_value(date(2026,10,14)).run(timeout=20)
     assert not app.exception and not app.error and requests[-1]==('^GSPC',date(2026,10,14))
     assert app.session_state['edge_archive_ref']==ref
-    assert app.radio(key='edge_archive_mode').value=='Seleziona fotografia storica'
+    assert app.radio(key='edge_archive_mode').value=='Altro rilevamento storico'
     assert any('non è una simulazione' in c.value for c in app.caption)
     assert any(button.label=='Scarica fotografia originale CBOE' for button in app.get('download_button'))
