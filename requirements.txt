@@ -1,6 +1,6 @@
 # Runtime for the independent Streamlit archive application (Python 3.12).
 -c constraints.txt
-streamlit==1.66.0
+streamlit==1.66.1
 # Community Cloud flags Arrow 26 as affected by apache/arrow#50471.
 pyarrow==24.0.0
 pandas==2.3.3
@@ -8,7 +8,7 @@ plotly==6.9.0
 httpx==0.28.1
 numpy==2.5.4
 scipy==1.18.1
-tzdata==2026.5
+tzdata==2026.6
 python-dotenv==1.2.4
 exchange-calendars==4.13.2
 yfinance==1.7.0
