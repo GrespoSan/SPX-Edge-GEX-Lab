@@ -74,7 +74,7 @@ def candles_gex_figure(result, shift=0., market=None, *, full=False, empty_messa
                              row=1,col=column,exclude_empty_subplots=False)
         figure.add_annotation(x=(index+.5)/max(1,len(levels)),y=1.12,xref='paper',yref='paper',
                               text=f'{label}: {value:,.2f}',showarrow=False,
-                              font=dict(color=color,size=12),bgcolor='rgba(15,22,33,0.9)',borderpad=4)
+                              font=dict(color=color,size=16),bgcolor='rgba(15,22,33,0.9)',borderpad=6)
     photo = result['spot']+shift
     for column in (1,2):
         figure.add_hline(y=photo,line_color='#b5c6de',line_dash='dot',row=1,col=column,
