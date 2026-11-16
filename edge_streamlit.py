@@ -59,7 +59,8 @@ def clear_private_session():
                 'edge_archive_fetched', 'edge_archive_analysis', 'edge_raw',
                 'edge_archive_selection', 'edge_archive_mode',
                 'edge_archive_selected_day', 'edge_archive_selected_snapshot',
-                'edge_chart_zoom', 'edge_price_view'):
+                'edge_chart_zoom', 'edge_price_view', 'edge_manual_cboe_raw',
+                'edge_manual_cboe_timestamp', 'edge_manual_cboe_downloaded_at'):
         st.session_state.pop(key, None)
     for key in list(st.session_state):
         if key.startswith(('edge_basis_', 'edge_market_')):
@@ -154,6 +155,9 @@ def source_data(mode):
             st.caption("Acquisizione manuale SPX dalla fonte CBOE pubblica; quotazioni ritardate. "
                        "Nessun salvataggio nell'archivio automatico.")
             if st.button("Scarica ora", key="edge_cboe_fetch_now"):
+                for key in ("edge_manual_cboe_raw", "edge_manual_cboe_timestamp",
+                            "edge_manual_cboe_downloaded_at"):
+                    st.session_state.pop(key, None)
                 try:
                     request = Request(
                         "https://cdn.cboe.com/api/global/delayed_quotes/options/_SPX.json",
