@@ -338,23 +338,54 @@ def render_result(result, synthetic=False, basis_target=None, archive_context=No
         return None if value is None else value + shift
     if snapshot_clock is not None:
         clock_label = 'rilevamento' if snapshot_clock_verified else 'archiviazione'
-        st.markdown(f"**Fotografia CBOE · {clock_label} ore {snapshot_clock:%H:%M} Roma**")
+        st.markdown(
+            f'<div style="color:#67e8f9;font-size:1.12rem;font-weight:750;'
+            f'margin:0.35rem 0 0.4rem">Fotografia CBOE · {clock_label} '
+            f'ore {snapshot_clock:%H:%M} Roma</div>',
+            unsafe_allow_html=True,
+        )
         st.caption(
-            f"Dato originale CBOE: {italian_time(result['timestamp'])}. "
+            f"Dato originale CBOE (ora italiana): {italian_time(result['timestamp'])}. "
             + ("Orario del download verificato nel registro."
                if snapshot_clock_verified
                else "Orario di archiviazione Supabase; non è necessariamente l'istante esatto del download.")
         )
     else:
-        st.markdown(f"**Timestamp del dato CBOE (interpretato come UTC): {italian_time(result['timestamp'])}**")
+        st.markdown(
+            f'<div style="color:#67e8f9;font-size:1.12rem;font-weight:750;'
+            f'margin:0.35rem 0 0.4rem">Dato CBOE (timestamp UTC convertito '
+            f'in ora italiana): {italian_time(result["timestamp"])}</div>',
+            unsafe_allow_html=True,
+        )
         if archive_context is not None:
             st.caption("Orario del download non disponibile: viene mostrato soltanto quello del dato CBOE.")
+
+    # Presentazione soltanto: non modificare il calcolo di spot, flip e walls.
+    def metric_card(column, label, value):
+        numeric = isinstance(value, (int, float)) and not isinstance(value, bool)
+        display = f"{value:,.2f}" if numeric else str(value or "N/D")
+        negative = (numeric and value < 0) or (
+            label.startswith("Regime") and display.strip().lower() == "negative"
+        )
+        color = "#ff616e" if negative else "#f8fafc"
+        with column:
+            st.markdown(
+                f'<div style="min-height:92px;padding:0.2rem 0">'
+                f'<div style="font-size:0.89rem;color:#cbd5e1;'
+                f'margin-bottom:0.38rem">{label}</div>'
+                f'<div style="color:{color};font-size:1.9rem;'
+                f'font-weight:650;line-height:1.15">{display}</div>'
+                f'</div>',
+                unsafe_allow_html=True,
+            )
+
     columns = st.columns(5)
-    for column, label, value in zip(columns,
-            ("Spot equivalente ES" if translated else 'Spot' + suffix,
-             'Call Wall' + suffix, 'Put Wall' + suffix, 'Gamma Flip' + suffix, 'Regime ' + result['symbol']),
-            (price(result["spot"]), price(result["call_wall"]), price(result["put_wall"]), price(result["flip"]), result["regime"])):
-        column.metric(label, f"{value:,.2f}" if isinstance(value, (int, float)) else value or "N/D")
+    metric_card(columns[0], 'Gamma Flip' + suffix, price(result["flip"]))
+    metric_card(columns[1], 'Call Wall' + suffix, price(result["call_wall"]))
+    metric_card(columns[2], 'Put Wall' + suffix, price(result["put_wall"]))
+    metric_card(columns[3], 'Regime ' + result['symbol'], result["regime"])
+    metric_card(columns[4], "Spot equivalente ES" if translated else 'Spot' + suffix,
+                price(result["spot"]))
     st.write("Scadenze effettive:", ", ".join(result["expiries"]))
     quality = "non stimabile" if result["quality_pct"] is None else f"{result['quality_pct']:.2f}%"
     st.write(f"Copertura GEX stimata: **{quality}** | Contratti validi: **{result['valid']} / {result['total']}**")
