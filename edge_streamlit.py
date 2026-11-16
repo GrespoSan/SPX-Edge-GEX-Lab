@@ -8,6 +8,8 @@ import json
 from datetime import datetime, date
 from pathlib import Path
 import time
+from urllib.request import Request, urlopen
+from urllib.error import URLError, HTTPError
 from zoneinfo import ZoneInfo
 
 import plotly.graph_objects as go
@@ -25,7 +27,7 @@ from edge_charts import candles_gex_figure
 
 ROOT = Path(__file__).resolve().parent
 UPLOAD = "Carica fotografia CBOE"
-DEMO = "Esempio sintetico (test)"
+DOWNLOAD_NOW = "Scarica ora da CBOE"
 AUTO = "Archivio SPX automatico"
 
 
@@ -142,15 +144,52 @@ def source_data(mode):
     config = archive_configuration()
     with st.expander("Strumenti avanzati · caricamento e test", expanded=False):
         alternative = st.radio(
-            "Sorgente alternativa", ("Archivio automatico", UPLOAD, DEMO),
+            "Sorgente alternativa", ("Archivio automatico", UPLOAD, DOWNLOAD_NOW),
             horizontal=True, key="edge_advanced_source",
         )
         if alternative == UPLOAD:
             uploaded = st.file_uploader("Fotografia originale CBOE (.json o .json.gz)", type=("json", "gz"))
             return (uploaded.getvalue() if uploaded else None), False
-        if alternative == DEMO:
-            st.warning("ESEMPIO SINTETICO: dati creati per test, non una fotografia reale CBOE.")
-            return (ROOT / "fixtures/synthetic_cboe_spx.json").read_bytes(), True
+        if alternative == DOWNLOAD_NOW:
+            st.caption("Acquisizione manuale SPX dalla fonte CBOE pubblica; quotazioni ritardate. "
+                       "Nessun salvataggio nell'archivio automatico.")
+            if st.button("Scarica ora", key="edge_cboe_fetch_now"):
+                try:
+                    request = Request(
+                        "https://cdn.cboe.com/api/global/delayed_quotes/options/_SPX.json",
+                        headers={"User-Agent": "Mozilla/5.0", "Accept": "application/json",
+                                 "Cache-Control": "no-cache"},
+                    )
+                    with st.spinner("Scaricamento fotografia SPX da CBOE..."):
+                        with urlopen(request, timeout=25) as response:
+                            payload = response.read(25 * 1024 * 1024 + 1)
+                        # Validate the original payload with the existing Edge reader.
+                        from edge_clone_engine import read_snapshot
+                        obj, _ = read_snapshot(payload)
+                        if not isinstance(obj["data"].get("options"), list) or not obj["data"]["options"]:
+                            raise ValueError("Catena opzioni SPX assente.")
+                        if not isinstance(obj.get("timestamp"), str):
+                            raise ValueError("Timestamp originale CBOE assente.")
+                        # Keep exactly the bytes fetched, not a reconstructed JSON.
+                        st.session_state["edge_manual_cboe_raw"] = payload
+                        st.session_state["edge_manual_cboe_timestamp"] = obj["timestamp"]
+                        st.session_state["edge_manual_cboe_downloaded_at"] = datetime.now(
+                            ZoneInfo("Europe/Rome")).strftime("%Y%m%d_%H%M%S")
+                except (HTTPError, URLError, TimeoutError, OSError, ValueError) as error:
+                    st.error(f"Download CBOE non riuscito: {error}")
+            payload = st.session_state.get("edge_manual_cboe_raw")
+            if payload:
+                st.success("Fotografia SPX originale CBOE acquisita; analisi Edge disponibile qui sotto.")
+                st.caption("Timestamp fonte CBOE: " +
+                           str(st.session_state.get("edge_manual_cboe_timestamp", "non disponibile")))
+                st.download_button(
+                    "Salva fotografia CBOE (.json)", data=payload,
+                    file_name="SPX_CBOE_MANUALE_" +
+                              st.session_state["edge_manual_cboe_downloaded_at"] + ".json",
+                    mime="application/json", key="edge_cboe_save_now", on_click="ignore",
+                )
+                return payload, False
+            return None, False
     if config is None:
         st.info("Archivio privato non configurato; usare gli strumenti avanzati per caricare un file.")
         return None, False
