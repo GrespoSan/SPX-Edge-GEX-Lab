@@ -21,6 +21,7 @@ def authorized_test_app(monkeypatch):
         lambda *args, **kwargs: args[2]
     )
     app = AppTest.from_file(APP)
+    app.secrets["MAINTENANCE_MODE"] = False
     app.secrets["EDGE_APP_PASSWORD"] = "STRONG_TEST_PASSWORD"
     app.secrets["SUPABASE_URL"] = "https://exampleproject.supabase.co"
     app.secrets["SUPABASE_ANON_KEY"] = "sb_publishable_test"
@@ -36,7 +37,9 @@ def authorized_test_app(monkeypatch):
 
 
 def test_startup_without_secrets_fails_closed_not_crash():
-    app = AppTest.from_file(APP).run(timeout=20)
+    app = AppTest.from_file(APP)
+    app.secrets["MAINTENANCE_MODE"] = False
+    app.run(timeout=20)
     assert not app.exception
     assert app.title[0].value == "SPX · Edge GEX Lab"
     assert any("EDGE_APP_PASSWORD" in message.value for message in app.error)
@@ -63,6 +66,7 @@ def test_synthetic_snapshot_runs_full_app_and_all_expiry_modes(monkeypatch):
 
 def test_unconfigured_automatic_archive_never_exposes_data():
     app = AppTest.from_file(APP)
+    app.secrets["MAINTENANCE_MODE"] = False
     app.secrets["EDGE_APP_PASSWORD"] = "STRONG_TEST_PASSWORD"
     app.session_state["edge_app_authorized"] = True
     app.session_state["edge_app_password_version"] = hashlib.sha256(
