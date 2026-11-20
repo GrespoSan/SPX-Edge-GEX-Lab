@@ -47,6 +47,7 @@ from zoneinfo import ZoneInfo
 import httpx
 
 from gexlab import config
+import gex_acquisition_pause as acquisition_pause
 from gexlab.engine.calendar import UTC, TradingCalendar, ny_today, time_to_expiry, valuation_time
 from gexlab.engine.gex import iv_ok
 from gexlab.engine.iv import implied_volatility
@@ -135,6 +136,10 @@ def fetch_raw(ticker: str, client: httpx.Client | None = None, now: float | None
     a shared cooldown (CBOE_FAIL_COOLDOWN_S, or Retry-After); respect_cooldown=False (the recorder)
     still fetches during it, every other caller gets an immediate SourceError instead.
     """
+    # Suspend BEFORE cache lookup, cooldown or any HTTP request.
+    # No accidental fresh data during a suspended automatic study.
+    if acquisition_pause.GEX_ACQUISITIONS_PAUSED:
+        raise SourceError(acquisition_pause.PAUSE_MESSAGE, status=503)
     ticker = ticker.upper()
     symbol = cboe_symbol(ticker)
     max_age = max(config.CBOE_CACHE_S, max_age_s if max_age_s is not None else config.CBOE_CACHE_S)
