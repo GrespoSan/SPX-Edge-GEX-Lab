@@ -14,12 +14,15 @@ UID = "11111111-2222-4333-8444-555555555555"
 
 def app_with_password():
     app = AppTest.from_file(str(ROOT / "edge_streamlit.py"))
+    app.secrets["MAINTENANCE_MODE"] = False
     app.secrets["EDGE_APP_PASSWORD"] = "STRONG_TEST_APP_PASSWORD"
     return app
 
 
 def test_no_password_secret_denies_all_app_modes():
-    app = AppTest.from_file(str(ROOT / "edge_streamlit.py")).run(timeout=20)
+    app = AppTest.from_file(str(ROOT / "edge_streamlit.py"))
+    app.secrets["MAINTENANCE_MODE"] = False
+    app.run(timeout=20)
     assert not app.exception
     assert any("EDGE_APP_PASSWORD" in item.value for item in app.error)
     assert not app.radio and not app.selectbox and not app.metric
