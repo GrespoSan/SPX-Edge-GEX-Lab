@@ -11,6 +11,7 @@ from pathlib import Path
 import logging
 
 from gexlab import config, magnitude, store
+import gex_acquisition_pause as acquisition_pause
 from gexlab.engine import gex as G
 from gexlab.engine.calendar import (NY, UTC, TradingCalendar, expiry_kind, iso_z, ny_today,
                                     settlement_dt, utc_now, valuation_label)
@@ -123,6 +124,10 @@ def fetch_chain(ticker: str, priority: str = "low", now: datetime | None = None,
     """Fetch and finalize (T, gamma, GEX at spot) a fresh 0 to 7 DTE chain.
 
     strict=True (the recorder and `diagnose`): an IV without a known, fresh quote time is never used."""
+    # Single policy for REST live maps and background recorder. Fail closed
+    # BEFORE calendar, Cboe, Alpaca or any quote/option request.
+    if acquisition_pause.GEX_ACQUISITIONS_PAUSED and not config.is_demo():
+        raise SourceError(acquisition_pause.PAUSE_MESSAGE, status=503)
     ticker = ticker.upper()
     if config.is_demo():
         ch = chain_from_fixture(ticker)
