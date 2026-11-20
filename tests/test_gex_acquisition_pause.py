@@ -54,6 +54,23 @@ def test_api_blocks_map_expiries_and_search_before_vendor_calls(monkeypatch):
         assert err.value.status_code == 503
 
 
+def test_paused_health_and_cached_chain_never_refresh_vendor(monkeypatch):
+    monkeypatch.setattr(config, "is_demo", lambda: False)
+    monkeypatch.setattr(service, "get_calendar",
+                        lambda *_: pytest.fail("Health performed Alpaca calendar request"))
+    monkeypatch.setattr(service, "fetch_chain",
+                        lambda *_args, **_kwargs: pytest.fail("Cached chain fetched again"))
+    monkeypatch.setattr(service, "last_frozen", lambda: None)
+    monkeypatch.setattr(service, "latest_captures", lambda: [])
+    state = service.health()
+    assert state["status"] == "paused"
+    assert state["feeds"]["cboe"] is False
+    assert state["calendar"]["source"] == "paused"
+    with pytest.raises(SourceError, match="sospese") as err:
+        service.cached_chain("SPX")
+    assert err.value.status == 503
+
+
 def test_streamlit_manual_download_is_disabled_without_deleting_archive():
     code = (ROOT / "edge_streamlit.py").read_text(encoding="utf-8")
     assert 'if acquisition_pause.GEX_ACQUISITIONS_PAUSED:' in code
