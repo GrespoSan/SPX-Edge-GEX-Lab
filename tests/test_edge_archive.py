@@ -166,6 +166,7 @@ def configured_app(authenticated=True):
     """
     app=AppTest.from_file(str(ROOT/'edge_streamlit.py'))
     app.session_state['edge_price_view']='Indice SPX'
+    app.secrets["MAINTENANCE_MODE"]=False
     app.secrets['EDGE_APP_PASSWORD']='ISOLATED_TEST_PASSWORD'
     app.secrets['SUPABASE_URL']=URL
     app.secrets['SUPABASE_ANON_KEY']=KEY
@@ -258,6 +259,7 @@ def test_arithmetic_mismatch_does_not_publish_unverified_metrics_or_report(monke
 
 def test_legacy_server_token_cannot_expose_private_data_to_public_page():
     app=AppTest.from_file(str(ROOT/'edge_streamlit.py'))
+    app.secrets["MAINTENANCE_MODE"]=False
     app.secrets['SUPABASE_READ_TOKEN']='LEGACY_PRIVATE_TOKEN'
     app.secrets['SUPABASE_SNAPSHOT_SIGNED_URL']='PRIVATE_URL'
     app.run(timeout=20)
