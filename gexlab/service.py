@@ -59,6 +59,12 @@ def get_calendar(now: datetime | None = None) -> TradingCalendar:
     if config.is_demo():
         d = demo_as_of().date()
         return TradingCalendar.weekdays(d - timedelta(days=120), d + timedelta(days=30))
+    if acquisition_pause.GEX_ACQUISITIONS_PAUSED:
+        # Health and diagnostics must not make a fresh Alpaca calendar GET.
+        d = ny_today(now)
+        return (load_calendar_cache(d) or
+                TradingCalendar.weekdays(d - timedelta(days=120),
+                                         d + timedelta(days=30)))
     if _CAL["cal"] is not None and _time.time() - _CAL["at"] < _CAL["ttl"]:
         return _CAL["cal"]
     d = ny_today(now)
@@ -166,6 +172,8 @@ def cached_chain(ticker: str) -> tuple[Chain, _Entry, bool]:
 
     Returns (chain, cache slot, stale).
     """
+    if acquisition_pause.GEX_ACQUISITIONS_PAUSED and not config.is_demo():
+        raise SourceError(acquisition_pause.PAUSE_MESSAGE, status=503)
     ticker = ticker.upper()
     lock = _LOCKS.setdefault(ticker, threading.Lock())
     with lock:
@@ -554,6 +562,8 @@ def last_frozen() -> dict | None:
 # ---------------------------------------------------------------- search + health
 
 def search(q: str) -> list[dict]:
+    if acquisition_pause.GEX_ACQUISITIONS_PAUSED and not config.is_demo():
+        raise SourceError(acquisition_pause.PAUSE_MESSAGE, status=503)
     q = (q or "").strip()
     if not q:
         return []
@@ -577,6 +587,20 @@ def search(q: str) -> list[dict]:
 
 def health() -> dict:
     demo = config.is_demo()
+    if acquisition_pause.GEX_ACQUISITIONS_PAUSED and not demo:
+        # Read existing local reports only. No Alpaca calendar/quote calls.
+        return {
+            "status": "paused", "demo": False,
+            "feeds": {"alpaca_options": None, "stocks": None, "cboe": False},
+            "market_open": False,
+            "last_frozen_capture": last_frozen(),
+            "latest_captures": latest_captures(),
+            "rate": {"used_last_min": 0, "cap": config.RATE_CAP_PER_MIN},
+            "keys_configured": load_credentials() is not None,
+            "calendar": {"source": "paused", "fetched_at": None,
+                         "covered": None, "degraded": True,
+                         "last_error": acquisition_pause.PAUSE_MESSAGE},
+        }
     if demo:
         feeds = {"alpaca_options": None, "stocks": None, "cboe": False}
         market_open = True
