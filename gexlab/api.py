@@ -15,6 +15,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from gexlab import config, service
+import gex_acquisition_pause as acquisition_pause
 from gexlab.sources.base import SourceError
 
 log = logging.getLogger("gexlab.api")
@@ -22,6 +23,13 @@ log = logging.getLogger("gexlab.api")
 app = FastAPI(title="Edge GEX Lab", version=config.MODEL_VERSION)
 app.add_middleware(CORSMiddleware, allow_origins=["http://127.0.0.1:5240", "http://localhost:5240"],
                    allow_methods=["GET", "POST"], allow_headers=["*"])
+
+
+def _require_new_gex_available():
+    # Frontend requests, including automatic refresh, must not reach vendors.
+    # Historical files and read-only archive remain separate from this API.
+    if acquisition_pause.GEX_ACQUISITIONS_PAUSED and not config.is_demo():
+        raise HTTPException(status_code=503, detail=acquisition_pause.PAUSE_MESSAGE)
 
 
 def _ticker(t: str) -> str:
@@ -51,11 +59,13 @@ def tickers():
 
 @app.get("/api/search")
 def search(q: str = Query("", max_length=40)):
+    _require_new_gex_available()
     return service.search(q)
 
 
 @app.get("/api/expirations")
 def expirations(ticker: str):
+    _require_new_gex_available()
     try:
         return service.expirations(_ticker(ticker))
     except SourceError as e:
@@ -64,6 +74,7 @@ def expirations(ticker: str):
 
 @app.get("/api/map")
 def gex_map(ticker: str, expiries: str | None = None, signed: bool = True):
+    _require_new_gex_available()
     exp = None
     if expiries:
         try:
