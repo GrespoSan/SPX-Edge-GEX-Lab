@@ -697,6 +697,10 @@ def automatic_archive(mode):
 
 def main():
     st.set_page_config(page_title="SPX Edge GEX Lab", layout="wide")
+    # No password, archive login, live market requests or Edge computation
+    # when the app is paused. Resume explicitly via Streamlit Secrets only.
+    from app_maintenance import suspend_if_enabled
+    suspend_if_enabled(st, "SPX · Edge GEX Lab")
     st.title("SPX · Edge GEX Lab")
     st.caption("Applicazione indipendente · fotografie CBOE in sola lettura")
     # Password gate applies to ALL app modes, including upload and synthetic demo.
