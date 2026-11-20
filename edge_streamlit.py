@@ -24,6 +24,7 @@ from edge_futures import BasisUnavailable, parse_basis, rounded_basis
 from edge_shared_basis import read_shared_basis
 from edge_market import MarketUnavailable, cached_market
 from edge_charts import candles_gex_figure
+from gex_acquisition_pause import GEX_ACQUISITIONS_PAUSED, PAUSE_MESSAGE
 
 ROOT = Path(__file__).resolve().parent
 UPLOAD = "Carica fotografia CBOE"
@@ -152,6 +153,11 @@ def source_data(mode):
             uploaded = st.file_uploader("Fotografia originale CBOE (.json o .json.gz)", type=("json", "gz"))
             return (uploaded.getvalue() if uploaded else None), False
         if alternative == DOWNLOAD_NOW:
+            if GEX_ACQUISITIONS_PAUSED:
+                st.info(PAUSE_MESSAGE)
+                st.button("Scarica ora · sospeso", key="edge_cboe_fetch_now",
+                          disabled=True)
+                return None, False
             st.caption("Acquisizione manuale SPX dalla fonte CBOE pubblica; quotazioni ritardate. "
                        "Nessun salvataggio nell'archivio automatico.")
             if st.button("Scarica ora", key="edge_cboe_fetch_now"):
