@@ -31,6 +31,9 @@ jobs:
           python -m pip install --upgrade pip
           python -m pip install -r requirements-dev.txt
 
+      - name: Verify maintenance gate separately before full regression
+        run: python -m pytest tests/test_app_maintenance.py -q -p no:cacheprovider
+
       - name: Run tests
         run: python -m pytest tests -q -p no:cacheprovider
 
